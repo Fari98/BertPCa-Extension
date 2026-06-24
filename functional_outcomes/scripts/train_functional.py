@@ -162,33 +162,34 @@ def train_model(config, output_path=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Train BertPCa on functional outcomes")
-    parser.add_argument("--outcome", choices=["ef", "uc"], required=True,
-                        help="Outcome to train on: 'ef' (erectile function) or 'uc' (urinary continence)")
+    parser.add_argument("--outcome", choices=["ef", "uc", "all"], default="all",
+                        help="Outcome to train on: 'ef', 'uc', or 'all' (default: all)")
     parser.add_argument("--output", type=str, default=None,
-                        help="Path to save the trained model (.keras)")
+                        help="Path to save the trained model (.keras) — only used when --outcome is ef or uc")
     args = parser.parse_args()
 
-    config_path = _CONFIG_MAP[args.outcome]
-    config = load_yaml_config(config_path)
+    outcomes = ["ef", "uc"] if args.outcome == "all" else [args.outcome]
 
-    # Override results_dir to be outcome-specific if needed
-    results_dir = os.path.join(_REPO_ROOT, config.RESULTS_DIR)
-    model_dir = os.path.join(_REPO_ROOT, config.MODEL_DIR)
-    config.RESULTS_DIR = results_dir
-    config.MODEL_DIR = model_dir
-    config.TRAIN_PATH = os.path.join(_REPO_ROOT, config.TRAIN_PATH)
-    config.VAL_PATH = os.path.join(_REPO_ROOT, config.VAL_PATH)
-    config.TEST_PATH = os.path.join(_REPO_ROOT, config.TEST_PATH)
+    for outcome in outcomes:
+        config_path = _CONFIG_MAP[outcome]
+        config = load_yaml_config(config_path)
 
-    output_path = args.output
-    if output_path:
-        output_path = os.path.join(_REPO_ROOT, output_path)
-    else:
-        os.makedirs(model_dir, exist_ok=True)
-        output_path = os.path.join(model_dir, f"best_model_{args.outcome}.keras")
+        results_dir = os.path.join(_REPO_ROOT, config.RESULTS_DIR)
+        model_dir = os.path.join(_REPO_ROOT, config.MODEL_DIR)
+        config.RESULTS_DIR = results_dir
+        config.MODEL_DIR = model_dir
+        config.TRAIN_PATH = os.path.join(_REPO_ROOT, config.TRAIN_PATH)
+        config.VAL_PATH = os.path.join(_REPO_ROOT, config.VAL_PATH)
+        config.TEST_PATH = os.path.join(_REPO_ROOT, config.TEST_PATH)
 
-    train_model(config, output_path=output_path)
-    print("\nDone.")
+        if args.output and len(outcomes) == 1:
+            output_path = os.path.join(_REPO_ROOT, args.output)
+        else:
+            os.makedirs(model_dir, exist_ok=True)
+            output_path = os.path.join(model_dir, f"best_model_{outcome}.keras")
+
+        train_model(config, output_path=output_path)
+        print("\nDone.")
 
 
 if __name__ == "__main__":
