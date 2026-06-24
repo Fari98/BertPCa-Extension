@@ -1,0 +1,97 @@
+# Default configuration for BertPCa model training and evaluation.
+
+# Reproducibility
+seed: 42
+
+# Data paths
+data_dir: "data"
+# Alternative BCR / prostate cancer paths:
+# train_path: "X_train_bcr.csv"
+# val_path: "X_val_bcr.csv"
+# test_path: "X_test_bcr.csv"
+train_path: "pbc_train.csv"
+val_path: "pbc_val.csv"
+test_path: "pbc_test.csv"
+
+# Feature configuration
+# Alternative BCR static features:
+# static_features:
+#   - pathgg_group_1
+#   - pathgg_group_2
+#   - pathgg_group_3
+#   - pathgg_group_4
+#   - percposcore
+#   - percposnodes
+#   - tpsa
+#   - psm_1
+#   - svi_1
+# Alternative BCR dynamic features:
+# dynamic_features:
+#   - times
+#   - psa
+static_features:
+  - drug
+  - age
+  - sex
+dynamic_features:
+  - times
+  - edema
+  - serBilir
+  - albumin
+  - SGOT
+
+# Preprocessing parameters
+batch_size: 16
+seq_length: 16
+# t_max: 10950  # 15 * 365, maximum follow-up time in days (BCR)
+t_max: 734.0
+augment_data: true
+scale_features: true
+
+# Model architecture parameters
+model:
+  learning_rate: 1.0e-5
+  num_encoder_layers: 1
+  intermediate_dim: 128
+  num_heads: 2
+  num_conv_blocks: 3
+  filters: 128
+  kernel_size: 5
+  pool_strides: 2
+  pool_size: 3
+  num_dense_layers: 3
+  dense_units: 264
+  activation: "relu"
+  norm_epsilon: 1.0e-5
+  dropout: 0.2
+  gamma: 0.0
+
+# Training parameters
+training:
+  epochs: 200
+  # batch_size is set from top-level batch_size
+  early_stopping_patience: 5
+  reduce_lr_patience: 3
+  reduce_lr_factor: 0.5
+  min_lr: 1.0e-6
+  verbose: "auto"
+
+# Evaluation parameters
+# Alternative BCR prediction/eval times (days):
+# p_times: [0, 365, 1095, 1825]   # 0, 1*365, 3*365, 5*365
+# e_times: [1825, 3650]           # 5*365, 10*365
+evaluation:
+  p_times: [52, 156, 260]   # 52, 3*52, 5*52 (weeks)
+  e_times: [60, 120, 240]
+  # t_max is set from top-level t_max
+
+# Hyperparameter tuning parameters
+tuning:
+  n_trials: 100
+  direction: "minimize"  # Minimize validation loss
+  study_name: "bertpca_optuna_study"
+
+# Output paths
+output_dir: "outputs"
+model_dir: "outputs/models"
+results_dir: "outputs/results"
