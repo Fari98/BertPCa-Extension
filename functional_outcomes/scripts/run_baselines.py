@@ -96,30 +96,44 @@ def run_nomogram(name: str, score_fn, train_pt, test_pt, e_times, t_max) -> dict
 
 
 def run_bertpca(model_path: str, train_df, test_df, static_cols, p_times, e_times, t_max) -> np.ndarray:
-    """Evaluate a saved BertPCa model using calculate_time_dependent_c_index."""
+    """Evaluate a saved BertPCa model using calculate_time_dependent_c_index.
+
+    Applies the same min-max scaling (fit on train) and t_max normalisation that
+    load_and_preprocess_data uses during training, so features and labels are in
+    the same [0,1] space that evaluate.py expects.
+    """
     import tensorflow as tf
     from bertpca import calculate_time_dependent_c_index
     from bertpca.loss import weibull_loss
-    from bertpca.data import load_and_preprocess_data
-    from config.load_config import load_yaml_config
+    from bertpca.data import preprocess_data
 
     print(f"  Loading BertPCa model from {model_path} ...")
     model = tf.keras.models.load_model(model_path, custom_objects={"weibull_loss": weibull_loss})
 
-    # Reconstruct structured label arrays
-    dt = np.dtype([("Status", "?"), ("Survival_in_days", "<f8")])
-    train_pt = patient_level(train_df, static_cols)
-    test_pt = patient_level(test_df, static_cols)
-    y_train = np.array(list(zip(train_pt["label"].astype(bool), train_pt["tte"])), dtype=dt)
-    y_test = np.array(list(zip(test_pt["label"].astype(bool), test_pt["tte"])), dtype=dt)
-
-    # Need preprocessed features in BertPCa tensor format — load from CSVs via data pipeline
-    # This requires the full long-format CSVs; use the test set features array directly
-    # We reconstruct input tensor from the long-format test_df
     dynamic_features = ["times", "psa"]
-    from bertpca.data import preprocess_data
+    features_to_scale = [f for f in static_cols + dynamic_features if f != "times"]
+
+    # Fit scaling on train, apply to both splits (mirrors load_and_preprocess_data)
+    train_s = train_df.copy().astype(float)
+    test_s  = test_df.copy().astype(float)
+    train_max = train_s[features_to_scale].max()
+    train_min = train_s[features_to_scale].min()
+    denom = (train_max - train_min).replace(0, 1)
+    for df in (train_s, test_s):
+        df[features_to_scale] = (df[features_to_scale] - train_min) / denom
+        df["times"] = df["times"] / t_max
+        df["tte"]   = df["tte"]   / t_max
+
+    # Build scaled structured label arrays (Survival_in_days = tte/t_max)
+    dt = np.dtype([("Status", "?"), ("Survival_in_days", "<f8")])
+    train_pt = train_s.groupby(level=0)[["tte", "label"]].first()
+    test_pt  = test_s.groupby(level=0)[["tte", "label"]].first()
+    y_train = np.array(list(zip(train_pt["label"].astype(bool), train_pt["tte"])), dtype=dt)
+    y_test  = np.array(list(zip(test_pt["label"].astype(bool),  test_pt["tte"])),  dtype=dt)
+
+    # Build feature tensors from scaled data
     test_ds, _ = preprocess_data(
-        test_df, static_cols, dynamic_features, "label",
+        test_s, static_cols, dynamic_features, "label",
         seq_length=16, batch_size=len(test_pt),
     )
     features = np.array(test_ds["features"])

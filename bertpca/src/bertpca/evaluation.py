@@ -78,16 +78,16 @@ def calculate_time_dependent_c_index(
     ))
     
     for i, p_time in enumerate(p_times_scaled):
-        p_time_raw = p_times[i]  # raw days — used for survival-time comparisons
+        # All survival times in y_*_struct are scaled by t_max (via load_and_preprocess_data),
+        # so all comparisons here use the scaled p_time / e_time values.
 
-        # Mask features to only include observations up to prediction time
-        # times_array is pre-scaled by t_max, so compare against scaled p_time
+        # Feature masking: times_array is pre-scaled → compare against scaled p_time
         mask = (times_array <= p_time)
         features_masked = mask[:, np.newaxis, :] * features_array
 
-        # Filter test/train samples that survive beyond prediction time (in days)
+        # Survival_in_days is scaled (tte / t_max ∈ [0,1]) — compare scaled vs scaled
         test_survival_times = y_test_struct['Survival_in_days']
-        test_time_mask = test_survival_times > p_time_raw
+        test_time_mask = test_survival_times > p_time
 
         if not np.any(test_time_mask):
             continue
@@ -95,7 +95,7 @@ def calculate_time_dependent_c_index(
         features_test = features_masked[test_time_mask, :, :]
 
         train_survival_times = y_train_struct['Survival_in_days']
-        train_time_mask = train_survival_times > p_time_raw
+        train_time_mask = train_survival_times > p_time
 
         if not np.any(train_time_mask):
             continue
@@ -105,26 +105,24 @@ def calculate_time_dependent_c_index(
         alpha = y_pred[:, 0] + 1 + epsilon
         beta = y_pred[:, 1] + 1
 
-        # Calculate C-index for each evaluation time
         for j, e_time in enumerate(e_times_scaled):
-            e_time_raw = e_times[j]  # raw days — passed to weighted_c_index
-
-            # Weibull hazard at scaled e_time (model operates in scaled units)
+            # Weibull hazard at scaled e_time (model trained on scaled time)
             risks = (beta / alpha) * (((e_time) / alpha) ** (beta - 1))
 
-            # Residual survival times in days (subtract raw p_time)
-            train_times = y_train_cols[train_time_mask, 1] - p_time_raw
+            # Residual survival times (all scaled)
+            train_times = y_train_cols[train_time_mask, 1] - p_time
             train_events = y_train_cols[train_time_mask, 0]
-            test_times = y_test_cols[test_time_mask, 1] - p_time_raw
+            test_times = y_test_cols[test_time_mask, 1] - p_time
             test_events = y_test_cols[test_time_mask, 0]
 
+            # Pass residual horizon (e_time - p_time), not absolute e_time,
+            # so the condition T_test[i] <= Time correctly identifies events
+            # that occurred between p_time and e_time.
             c_index[i, j] = weighted_c_index(
-                train_times,
-                train_events,
+                train_times, train_events,
                 risks,
-                test_times,
-                test_events,
-                e_time_raw,
+                test_times, test_events,
+                e_time - p_time,
             )
 
     
