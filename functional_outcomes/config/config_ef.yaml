@@ -1,0 +1,73 @@
+# Configuration for BertPCa on Erectile Function recovery (IIEF EF domain >= 17)
+
+seed: 42
+
+data_dir: "functional_outcomes/data"
+train_path: "ef_train.csv"
+val_path:   "ef_val.csv"
+test_path:  "ef_test.csv"
+
+static_features:
+  - nerve_sparing
+  - IIEF_EFdomain_pre
+  - age
+  - tpsa
+  - bmi
+  - pathgg_group
+  - ece_bin
+  - svi_bin
+  - psm
+  - lni_bin
+  - neo_adjHT
+  - pstage
+
+dynamic_features:
+  - times
+  - psa
+
+batch_size: 16
+seq_length: 16
+t_max: 365.0        # 1 year in days (max observed ttIIEF_17 ~ 358 days)
+augment_data: true
+scale_features: true
+
+model:
+  learning_rate: 1.0e-5
+  num_encoder_layers: 1
+  intermediate_dim: 128
+  num_heads: 2
+  num_conv_blocks: 3
+  filters: 128
+  kernel_size: 5
+  pool_strides: 2
+  pool_size: 3
+  num_dense_layers: 3
+  dense_units: 264
+  activation: "relu"
+  norm_epsilon: 1.0e-5
+  dropout: 0.2
+  gamma: 0.0
+
+training:
+  epochs: 200
+  early_stopping_patience: 5
+  reduce_lr_patience: 3
+  reduce_lr_factor: 0.5
+  min_lr: 1.0e-6
+  verbose: "auto"
+
+evaluation:
+  p_times: [30, 60, 90]      # 1, 2, 3 months
+  e_times: [90, 180, 365]    # 3, 6, 12 months
+
+tuning:
+  n_trials: 100
+  direction: "minimize"
+  study_name: "bertpca_ef_optuna_study"
+
+output_dir: "functional_outcomes/outputs"
+model_dir:  "functional_outcomes/outputs/models"
+results_dir: "functional_outcomes/outputs/results/ef"
+
+# Note: t_max set to 365 days — max observed ttIIEF_17 is ~358 days.
+# p_times/e_times are in unscaled days; they are divided by t_max internally.

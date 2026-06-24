@@ -1,0 +1,67 @@
+# BertPCa config for STKLM0 dataset — Cancer-Specific Mortality prediction
+
+seed: 42
+
+data_dir: "stklm0/data"
+train_path: "stklm0_train.csv"
+val_path:   "stklm0_val.csv"
+test_path:  "stklm0_test.csv"
+
+static_features:
+  - d_diaage       # age at diagnosis (years)
+  - d_spsa         # PSA at diagnosis (ng/ml)
+  - isup_gealson   # ISUP grade at biopsy (1-5)
+  - t_clean_ord    # clinical T stage ordinal (0=T1a/b, 1=T1c, 2=T2, 3=T3)
+  - isup_RP        # ISUP grade at RP (1-5)
+  - pT_ord         # pathological T stage ordinal (0=pT2, 1=pT3/pT3a, 2=pT3b, 3=pT4)
+  - pR_bin         # positive surgical margins (0=Neg, 1=Pos)
+  - pRlenght       # margin length in mm (0 when PSM negative)
+  - pN_bin         # pathological N stage (0=pN0, 1=pN1)
+
+dynamic_features:
+  - times          # days since surgery (divided by t_max internally)
+  - psa            # PSA value (ng/ml)
+
+batch_size: 16
+seq_length: 16
+t_max: 3650.0      # 10-year cap (shared between Milan and STKLM0 for comparability)
+augment_data: true
+scale_features: true
+
+model:
+  learning_rate: 1.0e-5
+  num_encoder_layers: 1
+  intermediate_dim: 128
+  num_heads: 2
+  num_conv_blocks: 3
+  filters: 128
+  kernel_size: 5
+  pool_strides: 2
+  pool_size: 3
+  num_dense_layers: 3
+  dense_units: 264
+  activation: "relu"
+  norm_epsilon: 1.0e-5
+  dropout: 0.2
+  gamma: 0.0
+
+training:
+  epochs: 200
+  early_stopping_patience: 10
+  reduce_lr_patience: 5
+  reduce_lr_factor: 0.5
+  min_lr: 1.0e-6
+  verbose: "auto"
+
+evaluation:
+  p_times: [180, 365, 730]      # 6m, 1y, 2y prediction landmarks
+  e_times: [730, 1825, 3650]    # 2y, 5y, 10y evaluation horizons
+
+tuning:
+  n_trials: 100
+  direction: "minimize"
+  study_name: "bertpca_stklm0_study"
+
+output_dir:  "stklm0/outputs"
+model_dir:   "stklm0/outputs/models"
+results_dir: "stklm0/outputs/results/stklm0"

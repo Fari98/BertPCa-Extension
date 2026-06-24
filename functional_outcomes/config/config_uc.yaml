@@ -1,0 +1,69 @@
+# Configuration for BertPCa on Urinary Continence recovery (ICIQ = 1)
+
+seed: 42
+
+data_dir: "functional_outcomes/data"
+train_path: "uc_train.csv"
+val_path:   "uc_val.csv"
+test_path:  "uc_test.csv"
+
+static_features:
+  - nerve_sparing
+  - IPSS_pre
+  - age
+  - tpsa
+  - bmi
+  - pathgg_group
+  - ece_bin
+  - svi_bin
+  - psm
+  - prostate_vol
+  - operative_time
+
+dynamic_features:
+  - times
+  - psa
+
+batch_size: 16
+seq_length: 16
+t_max: 365.0        # 1 year in days (max observed ttICIQ ~ 395 days, clipped)
+augment_data: true
+scale_features: true
+
+model:
+  learning_rate: 1.0e-5
+  num_encoder_layers: 1
+  intermediate_dim: 128
+  num_heads: 2
+  num_conv_blocks: 3
+  filters: 128
+  kernel_size: 5
+  pool_strides: 2
+  pool_size: 3
+  num_dense_layers: 3
+  dense_units: 264
+  activation: "relu"
+  norm_epsilon: 1.0e-5
+  dropout: 0.2
+  gamma: 0.0
+
+training:
+  epochs: 200
+  early_stopping_patience: 5
+  reduce_lr_patience: 3
+  reduce_lr_factor: 0.5
+  min_lr: 1.0e-6
+  verbose: "auto"
+
+evaluation:
+  p_times: [7, 14, 30]      # 1 week, 2 weeks, 1 month
+  e_times: [30, 90, 180]    # 1, 3, 6 months
+
+tuning:
+  n_trials: 100
+  direction: "minimize"
+  study_name: "bertpca_uc_optuna_study"
+
+output_dir: "functional_outcomes/outputs"
+model_dir:  "functional_outcomes/outputs/models"
+results_dir: "functional_outcomes/outputs/results/uc"
