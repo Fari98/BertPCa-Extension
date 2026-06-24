@@ -39,45 +39,48 @@ def weibull_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     tf.Tensor
         Negative log-likelihood loss value
     """
-    EPSILON = 1e-5
+    EPSILON = 1e-7
     y_true = tf.cast(y_true, tf.float64)
     y_pred = tf.cast(y_pred, tf.float64)
 
-    
-    t = y_true[:, 0]  # Survival/censoring time
-    event = y_true[:, 1]  # 1 if event happened, 0 if censored
-    t_last = y_true[:, 2]  # Last observation time
+    t      = y_true[:, 0]   # survival/censoring time (scaled)
+    event  = y_true[:, 1]   # 1=event, 0=censored
+    t_last = y_true[:, 2]   # last observation time (scaled)
 
-        # Clamp t_new to be strictly positive (Weibull requires t > 0)
-    t_new = tf.maximum(t - t_last, EPSILON)
+    t_new = tf.maximum(t - t_last, EPSILON)   # remaining time > 0
 
-    # Lower-bound alpha and beta for numerical stability
-    alpha = tf.maximum(y_pred[:, 0] + 1, EPSILON)  # Weibull scale parameter
-    beta = tf.maximum(y_pred[:, 1] + 1, EPSILON)  # Weibull shape parameter
+    # Weibull parameters: raw+1 keeps alpha,beta >= 1 at initialization
+    alpha = tf.maximum(y_pred[:, 0] + 1.0, EPSILON)
+    beta  = tf.maximum(y_pred[:, 1] + 1.0, EPSILON)
 
-    # Compute Weibull components with numerical safeguards
-    ratio = t_new / alpha
-    ratio_clipped = tf.clip_by_value(ratio, EPSILON, 1e6)  # Prevent extreme values
-    
-    # Log likelihood for observed events
-    hazard = (beta / alpha) * (ratio_clipped ** (beta - 1))
-    s = tf.exp(-(ratio_clipped ** beta))
-    
-    # Clip hazard * s to prevent log(0) -> -inf
-    hazard_s = tf.clip_by_value(hazard * s, EPSILON, 1e10)
-    log_likelihood_event = tf.math.log(hazard_s)
+    # --- Log-space formulation to avoid ratio^beta overflow ---
+    # When alpha → 0 and beta is large, ratio^beta → inf and exp(-ratio^beta) → 0
+    # simultaneously, giving inf*0 = NaN in linear space.  Log space is always safe.
+    #
+    # log_ratio = log(t_new / alpha)
+    # H(t)      = exp(beta * log_ratio)       cumulative hazard
+    # log S(t)  = -H(t)
+    # log h(t)  = log(beta) - log(alpha) + (beta-1)*log_ratio
 
-    # Log likelihood for censored events
-    s_clipped = tf.clip_by_value(s, EPSILON, 1.0)
-    log_likelihood_censored = tf.math.log(s_clipped)
+    log_ratio = tf.math.log(t_new) - tf.math.log(alpha)
 
-    # Combine log-likelihoods with clipping to prevent -inf
-    log_likelihood = event * log_likelihood_event + (1 - event) * log_likelihood_censored
-    log_likelihood = tf.clip_by_value(log_likelihood, -1e6, 1e6)  # Prevent extreme log-likelihoods
-    
-    loss = -tf.reduce_mean(log_likelihood)
+    # Clip beta*log_ratio before exp() — float64 overflows above ~709
+    log_H = tf.clip_by_value(beta * log_ratio, -100.0, 100.0)
+    cum_hazard = tf.exp(log_H)          # H(t_new) >= 0
+    log_s = -cum_hazard                 # log S(t_new) = -H(t_new)
 
-    return loss
+    log_hazard = (tf.math.log(beta) - tf.math.log(alpha)
+                  + (beta - 1.0) * log_ratio)
+    log_hazard = tf.clip_by_value(log_hazard, -100.0, 100.0)
+
+    log_likelihood_event    = log_hazard + log_s
+    log_likelihood_censored = log_s
+
+    log_likelihood = (event * log_likelihood_event
+                      + (1.0 - event) * log_likelihood_censored)
+    log_likelihood = tf.clip_by_value(log_likelihood, -1e6, 1e6)
+
+    return tf.cast(-tf.reduce_mean(log_likelihood), tf.float32)
 
 
 def coxph_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
