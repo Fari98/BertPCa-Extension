@@ -190,19 +190,8 @@ def _run_trial(trial, train_ds, val_ds, config, n_features: int) -> float:
     return best_val_nll if best_val_nll < float("inf") else 1e6
 
 
-def main():
-    parser = argparse.ArgumentParser(description="HPT for BertPCa functional outcomes")
-    parser.add_argument("--outcome", choices=["ef", "uc"], required=True,
-                        help="Outcome to tune: 'ef' or 'uc'")
-    parser.add_argument("--n-trials", type=int, default=50,
-                        help="Number of Optuna trials (default: 50)")
-    parser.add_argument("--study-name", type=str, default=None,
-                        help="Optuna study name (default: bertpca_<outcome>_hpt)")
-    parser.add_argument("--storage", type=str, default=None,
-                        help="Optuna storage URL for resumable studies (e.g. sqlite:///hpt.db)")
-    args = parser.parse_args()
-
-    config = load_yaml_config(_CONFIG_MAP[args.outcome])
+def _tune_outcome(outcome: str, n_trials: int, study_name: str, storage: str):
+    config = load_yaml_config(_CONFIG_MAP[outcome])
 
     # Resolve absolute paths
     config.TRAIN_PATH = os.path.join(_REPO_ROOT, config.TRAIN_PATH)
@@ -215,7 +204,7 @@ def main():
 
     set_seeds(config.SEED)
 
-    print(f"Loading data for {args.outcome.upper()} ...")
+    print(f"\nLoading data for {outcome.upper()} ...")
     train_ds, val_ds, _, _, _, _ = load_and_preprocess_data(
         config.TRAIN_PATH,
         config.VAL_PATH,
@@ -230,25 +219,25 @@ def main():
     )
     n_features = len(config.STATIC_FEATURES) + len(config.DYNAMIC_FEATURES)
 
-    study_name = args.study_name or f"bertpca_{args.outcome}_hpt"
+    sname = study_name or f"bertpca_{outcome}_hpt"
     pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=10)
     study = optuna.create_study(
         direction="minimize",
-        study_name=study_name,
-        storage=args.storage,
+        study_name=sname,
+        storage=storage,
         load_if_exists=True,
         pruner=pruner,
     )
 
-    print(f"Starting {args.n_trials} trials for {args.outcome.upper()} ...")
+    print(f"Starting {n_trials} trials for {outcome.upper()} ...")
     study.optimize(
         lambda trial: _run_trial(trial, train_ds, val_ds, config, n_features),
-        n_trials=args.n_trials,
+        n_trials=n_trials,
         catch=(Exception,),
     )
 
     print("\n" + "=" * 60)
-    print(f"HPT complete — {args.outcome.upper()}")
+    print(f"HPT complete — {outcome.upper()}")
     print(f"Finished trials: {len(study.trials)}")
     best = study.best_trial
     print(f"Best val NLL:    {best.value:.6f}")
@@ -256,9 +245,9 @@ def main():
     for k, v in best.params.items():
         print(f"  {k}: {v}")
 
-    out_path = os.path.join(results_dir, f"hpt_results_{args.outcome}.txt")
+    out_path = os.path.join(results_dir, f"hpt_results_{outcome}.txt")
     with open(out_path, "w") as f:
-        f.write(f"HPT results — {args.outcome.upper()}\n")
+        f.write(f"HPT results — {outcome.upper()}\n")
         f.write("=" * 60 + "\n")
         f.write(f"Finished trials: {len(study.trials)}\n")
         f.write(f"Best val NLL:    {best.value:.6f}\n\n")
@@ -270,7 +259,24 @@ def main():
         completed.sort(key=lambda t: t.value)
         for t in completed[:20]:
             f.write(f"  Trial {t.number:3d}: val_nll={t.value:.6f}  {t.params}\n")
-    print(f"\nResults saved to {out_path}")
+    print(f"Results saved to {out_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="HPT for BertPCa functional outcomes")
+    parser.add_argument("--outcome", choices=["ef", "uc", "all"], default="all",
+                        help="Outcome to tune: 'ef', 'uc', or 'all' (default: all)")
+    parser.add_argument("--n-trials", type=int, default=50,
+                        help="Number of Optuna trials per outcome (default: 50)")
+    parser.add_argument("--study-name", type=str, default=None,
+                        help="Optuna study name (default: bertpca_<outcome>_hpt)")
+    parser.add_argument("--storage", type=str, default=None,
+                        help="Optuna storage URL for resumable studies (e.g. sqlite:///hpt.db)")
+    args = parser.parse_args()
+
+    outcomes = ["ef", "uc"] if args.outcome == "all" else [args.outcome]
+    for outcome in outcomes:
+        _tune_outcome(outcome, args.n_trials, args.study_name, args.storage)
 
 
 if __name__ == "__main__":
