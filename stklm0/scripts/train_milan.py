@@ -209,18 +209,23 @@ def main():
     parser = argparse.ArgumentParser(
         description="Train BertPCa on Milan data (STKLM0 feature schema)"
     )
-    parser.add_argument("--outcome", choices=["bcr", "csm"], required=True,
-                        help="Milan training outcome")
+    parser.add_argument("--outcome", choices=["bcr", "csm", "both"], default="both",
+                        help="Milan training outcome (default: both)")
     parser.add_argument("--output", type=str, default=None,
-                        help="Path to save the trained model (.keras)")
+                        help="Path to save the trained model (.keras) — only used when --outcome is bcr or csm")
     args = parser.parse_args()
 
-    output = args.output
-    if output and not os.path.isabs(output):
-        output = os.path.join(_REPO_ROOT, output)
+    outcomes = ["bcr", "csm"] if args.outcome == "both" else [args.outcome]
 
-    run(args.outcome, output_path=output)
-    print("\nDone.")
+    for outcome in outcomes:
+        output = args.output
+        if output and len(outcomes) == 1 and not os.path.isabs(output):
+            output = os.path.join(_REPO_ROOT, output)
+        elif len(outcomes) > 1:
+            output = None  # use default per-outcome path
+
+        run(outcome, output_path=output)
+        print("\nDone.")
 
 
 if __name__ == "__main__":
