@@ -402,36 +402,60 @@ if n_psa == 0:
 with st.expander("Preview data"):
     st.dataframe(df_raw.head(10), width="stretch")
 
-if not st.button("Run", type="primary", use_container_width=True):
+# ── Outcome selection ────────────────────────────────────────────────────────
+has_event = all(c in df_raw.columns for c in ["crmort", "t_end"])
+
+sel_col, run_col = st.columns([3, 1])
+with sel_col:
+    selected_outcomes = st.multiselect(
+        "Outcomes to predict (Milan models)",
+        options=["BCR", "CSM"],
+        default=["BCR", "CSM"],
+        help="BCR = Biochemical Recurrence · CSM = Cancer-Specific Mortality",
+    )
+    run_training = st.checkbox(
+        "Train new model on uploaded data (CSM, requires crmort + t_end)",
+        value=has_event,
+        disabled=not has_event,
+        help="Disabled when the uploaded file is missing crmort or t_end columns.",
+    )
+with run_col:
+    st.write("")  # vertical alignment spacer
+    st.write("")
+    do_run = st.button("Run", type="primary", use_container_width=True)
+
+if not do_run:
+    st.stop()
+
+if not selected_outcomes and not run_training:
+    st.warning("Select at least one outcome or enable training.")
     st.stop()
 
 # ── Milan Inference ─────────────────────────────────────────────────────────
-st.markdown("---")
-st.subheader("Milan Model Inference")
-bcr_col, csm_col = st.columns(2)
-
 milan_results: dict = {}
-for outcome_key, col in [("bcr", bcr_col), ("csm", csm_col)]:
-    with col:
-        st.markdown(f"**{outcome_key.upper()}**")
-        with st.spinner(f"Running Milan {outcome_key.upper()} …"):
-            result, err = _milan_inference(df_raw, outcome_key)
-        if err:
-            st.error(err)
-        else:
-            milan_results[outcome_key] = result
-            _show_inference_block(result, outcome_key)
+if selected_outcomes:
+    st.markdown("---")
+    st.subheader("Milan Model Inference")
+    outcome_cols = st.columns(len(selected_outcomes))
+    for (outcome_key, col) in zip([o.lower() for o in selected_outcomes], outcome_cols):
+        with col:
+            st.markdown(f"**{outcome_key.upper()}**")
+            with st.spinner(f"Running Milan {outcome_key.upper()} …"):
+                result, err = _milan_inference(df_raw, outcome_key)
+            if err:
+                st.error(err)
+            else:
+                milan_results[outcome_key] = result
+                _show_inference_block(result, outcome_key)
 
 # ── Train & Evaluate ─────────────────────────────────────────────────────────
 st.markdown("---")
 st.subheader("Train & Evaluate New Model (CSM)")
 
-missing_train = [c for c in ["crmort", "t_end"] if c not in df_raw.columns]
-if missing_train:
-    st.warning(
-        f"Columns `{'`, `'.join(missing_train)}` not found — skipping training. "
-        "Add them to enable this mode."
-    )
+if not run_training:
+    st.info("Training skipped — uncheck to re-enable above.")
+elif not has_event:
+    st.warning("Columns `crmort` and/or `t_end` not found — cannot train.")
 else:
     log_box = st.empty()
     log_lines: list[str] = []
