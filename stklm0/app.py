@@ -63,23 +63,30 @@ st.caption("Weibull survival model · STKLM0 patient schema")
 
 @st.cache_resource(show_spinner="Loading Milan model …")
 def _load_milan_model(outcome_key: str):
+    import zipfile
     import tensorflow as tf
     from bertpca.loss import weibull_loss
     path = os.path.join(_MODELS_DIR, f"best_model_milan_{outcome_key}.keras")
     if not os.path.exists(path):
         return None, f"Model not found: `{path}`"
-    # Detect Git LFS pointer (file < 512 bytes and starts with "version https://")
-    size = os.path.getsize(path)
-    if size < 512:
+    # Detect Git LFS pointer (tiny text file)
+    if os.path.getsize(path) < 512:
         with open(path, "rb") as fh:
-            head = fh.read(40)
-        if head.startswith(b"version https://git-lfs"):
-            return None, (
-                "Model file is a Git LFS pointer — the actual weights were not downloaded. "
-                "Ensure `git-lfs` is installed on the server (`packages.txt` must contain `git-lfs`) "
-                "and the repo was cloned with `git lfs pull`."
-            )
-    return tf.keras.models.load_model(path, custom_objects={"weibull_loss": weibull_loss}), None
+            if fh.read(40).startswith(b"version https://git-lfs"):
+                return None, (
+                    "Model file is a Git LFS pointer — weights were not downloaded. "
+                    "Ensure `packages.txt` contains `git-lfs`."
+                )
+    # Branch on actual file format: ZIP (.keras, Keras ≥2.12) vs HDF5 (older Keras)
+    if zipfile.is_zipfile(path):
+        model = tf.keras.models.load_model(path, custom_objects={"weibull_loss": weibull_loss})
+    else:
+        # HDF5 format saved by TF ≤2.11 — use Keras legacy loader
+        from keras.saving.legacy import h5_format
+        model = h5_format.load_model_from_hdf5(
+            path, custom_objects={"weibull_loss": weibull_loss}
+        )
+    return model, None
 
 
 @st.cache_data(show_spinner=False)
