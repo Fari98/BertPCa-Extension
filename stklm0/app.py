@@ -67,13 +67,29 @@ from bertpca.loss import weibull_loss  # noqa: E402
 
 
 class _LegacyMHA(tf.keras.layers.MultiHeadAttention):
-    """Strip query_shape/key_shape/value_shape keys added by Keras 2 serializer."""
+    """Keras 2 → Keras 3 shim for MultiHeadAttention.
+
+    Two incompatibilities fixed:
+    1. from_config: Keras 2 serialised query_shape/key_shape/value_shape into the
+       config; Keras 3 __init__ rejects them — strip them and stash for build().
+    2. build: Keras 3 requires build(query_shape, value_shape, key_shape=None) but
+       the H5 loader calls build(query_shape) with a single positional arg.
+    """
+
     @classmethod
     def from_config(cls, config):
-        config.pop("query_shape", None)
-        config.pop("key_shape",   None)
-        config.pop("value_shape", None)
+        config = dict(config)
+        cls._saved_query_shape = config.pop("query_shape", None)
+        cls._saved_key_shape   = config.pop("key_shape",   None)
+        cls._saved_value_shape = config.pop("value_shape", None)
         return super().from_config(config)
+
+    def build(self, query_shape, value_shape=None, key_shape=None):
+        if value_shape is None:
+            value_shape = getattr(self.__class__, "_saved_value_shape", None) or query_shape
+        if key_shape is None:
+            key_shape = getattr(self.__class__, "_saved_key_shape", None)
+        super().build(query_shape, value_shape, key_shape)
 
 
 _CUSTOM_OBJECTS = {
