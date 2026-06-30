@@ -77,15 +77,25 @@ def _load_milan_model(outcome_key: str):
                     "Model file is a Git LFS pointer — weights were not downloaded. "
                     "Ensure `packages.txt` contains `git-lfs`."
                 )
-    # Branch on actual file format: ZIP (.keras, Keras ≥2.12) vs HDF5 (older Keras)
+    # Branch on actual file format: ZIP (.keras ≥2.12) vs HDF5 (older TF/Keras)
     if zipfile.is_zipfile(path):
         model = tf.keras.models.load_model(path, custom_objects={"weibull_loss": weibull_loss})
     else:
-        # HDF5 format saved by TF ≤2.11 — use Keras legacy loader
-        from keras.saving.legacy import h5_format
-        model = h5_format.load_model_from_hdf5(
-            path, custom_objects={"weibull_loss": weibull_loss}
-        )
+        # HDF5 saved by TF ≤2.11 despite .keras extension.
+        # Keras 3 chooses the loader by extension, so copy to a temp .h5 file.
+        import shutil, tempfile
+        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
+            tmp_path = tmp.name
+        shutil.copy2(path, tmp_path)
+        try:
+            model = tf.keras.models.load_model(
+                tmp_path, custom_objects={"weibull_loss": weibull_loss}
+            )
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
     return model, None
 
 
