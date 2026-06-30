@@ -58,18 +58,57 @@ st.title("BertPCa — Prostate Cancer Survival Prediction")
 st.caption("Weibull survival model · STKLM0 patient schema")
 
 # ---------------------------------------------------------------------------
+# Keras 2 → 3 compatibility shim (must be after tf import below)
+# ---------------------------------------------------------------------------
+
+import tensorflow as tf  # noqa: E402
+
+from bertpca.loss import weibull_loss  # noqa: E402
+
+
+class _LegacyMHA(tf.keras.layers.MultiHeadAttention):
+    """Strip query_shape/key_shape/value_shape keys added by Keras 2 serializer."""
+    @classmethod
+    def from_config(cls, config):
+        config.pop("query_shape", None)
+        config.pop("key_shape",   None)
+        config.pop("value_shape", None)
+        return super().from_config(config)
+
+
+_CUSTOM_OBJECTS = {
+    "weibull_loss":        weibull_loss,
+    "MultiHeadAttention":  _LegacyMHA,
+}
+
+# ---------------------------------------------------------------------------
 # Cached resource loaders
 # ---------------------------------------------------------------------------
 
+
+def _load_keras_model(path: str):
+    """Load a .keras model regardless of whether it is ZIP (Keras ≥2.12) or HDF5 (older)."""
+    import zipfile, shutil, tempfile
+    if zipfile.is_zipfile(path):
+        return tf.keras.models.load_model(path, custom_objects=_CUSTOM_OBJECTS)
+    # HDF5 saved by TF ≤2.11 — Keras 3 picks loader by extension, so copy to .h5
+    with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
+        tmp_path = tmp.name
+    shutil.copy2(path, tmp_path)
+    try:
+        return tf.keras.models.load_model(tmp_path, custom_objects=_CUSTOM_OBJECTS)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
 @st.cache_resource(show_spinner="Loading Milan model …")
 def _load_milan_model(outcome_key: str):
-    import zipfile
-    import tensorflow as tf
-    from bertpca.loss import weibull_loss
     path = os.path.join(_MODELS_DIR, f"best_model_milan_{outcome_key}.keras")
     if not os.path.exists(path):
         return None, f"Model not found: `{path}`"
-    # Detect Git LFS pointer (tiny text file)
     if os.path.getsize(path) < 512:
         with open(path, "rb") as fh:
             if fh.read(40).startswith(b"version https://git-lfs"):
@@ -77,25 +116,7 @@ def _load_milan_model(outcome_key: str):
                     "Model file is a Git LFS pointer — weights were not downloaded. "
                     "Ensure `packages.txt` contains `git-lfs`."
                 )
-    # Branch on actual file format: ZIP (.keras ≥2.12) vs HDF5 (older TF/Keras)
-    if zipfile.is_zipfile(path):
-        model = tf.keras.models.load_model(path, custom_objects={"weibull_loss": weibull_loss})
-    else:
-        # HDF5 saved by TF ≤2.11 despite .keras extension.
-        # Keras 3 chooses the loader by extension, so copy to a temp .h5 file.
-        import shutil, tempfile
-        with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as tmp:
-            tmp_path = tmp.name
-        shutil.copy2(path, tmp_path)
-        try:
-            model = tf.keras.models.load_model(
-                tmp_path, custom_objects={"weibull_loss": weibull_loss}
-            )
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
+    return _load_keras_model(path), None
     return model, None
 
 
