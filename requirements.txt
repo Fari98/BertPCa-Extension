@@ -32,7 +32,7 @@ optuna>=3.0.0
 
 # TensorFlow — GPU on native Windows requires TF 2.10 + CUDA toolkit
 # TF >= 2.11 dropped native Windows CUDA; for GPU on Windows: pip install tensorflow==2.10.*
-tensorflow>=2.10.0
+tensorflow>=2.12.0,<2.16.0
 
 # Research / external datasets
 pyreadr>=0.4.0           # read .RData files (Milan dataset)

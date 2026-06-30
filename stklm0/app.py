@@ -57,60 +57,13 @@ st.set_page_config(
 st.title("BertPCa — Prostate Cancer Survival Prediction")
 st.caption("Weibull survival model · STKLM0 patient schema")
 
-# ---------------------------------------------------------------------------
-# Keras 2 → 3 compatibility shim (must be after tf import below)
-# ---------------------------------------------------------------------------
-
 import tensorflow as tf  # noqa: E402
 
 from bertpca.loss import weibull_loss  # noqa: E402
 
-
-class _LegacyMHA(tf.keras.layers.MultiHeadAttention):
-    """Keras 2 → Keras 3 shim for MultiHeadAttention.
-
-    Two incompatibilities fixed:
-    1. from_config: Keras 2 serialised query_shape/key_shape/value_shape into the
-       config; Keras 3 __init__ rejects them — strip them and stash for build().
-    2. build: Keras 3 requires build(query_shape, value_shape, key_shape=None) but
-       the H5 loader calls build(query_shape) with a single positional arg.
-    """
-
-    @classmethod
-    def from_config(cls, config):
-        config = dict(config)
-        cls._saved_query_shape = config.pop("query_shape", None)
-        cls._saved_key_shape   = config.pop("key_shape",   None)
-        cls._saved_value_shape = config.pop("value_shape", None)
-        return super().from_config(config)
-
-    def build(self, query_shape, value_shape=None, key_shape=None):
-        if value_shape is None:
-            value_shape = getattr(self.__class__, "_saved_value_shape", None) or query_shape
-        if key_shape is None:
-            key_shape = getattr(self.__class__, "_saved_key_shape", None)
-        super().build(query_shape, value_shape, key_shape)
-
-    def call(self, query, value=None, key=None, **kwargs):
-        # Keras 3's H5 legacy loader fails to resolve inbound node references for
-        # multi-input layers; value/key arrive as raw list node specs instead of
-        # tensors.  This model uses self-attention (q=k=v), so substitute query.
-        if value is None or not hasattr(value, "shape"):
-            value = query
-        if key is not None and not hasattr(key, "shape"):
-            key = None
-        # Keras 2 serialises boolean call kwargs as strings.
-        if isinstance(kwargs.get("return_attention_scores"), str):
-            kwargs["return_attention_scores"] = (
-                kwargs["return_attention_scores"].lower() == "true"
-            )
-        return super().call(query, value=value, key=key, **kwargs)
-
-
-_CUSTOM_OBJECTS = {
-    "weibull_loss":        weibull_loss,
-    "MultiHeadAttention":  _LegacyMHA,
-}
+# TF ≥2.16 ships Keras 3 which breaks H5 functional-model loading; pin <2.16 in
+# requirements.txt so Keras 2 is always used and no shims are needed here.
+_CUSTOM_OBJECTS = {"weibull_loss": weibull_loss}
 
 # ---------------------------------------------------------------------------
 # Cached resource loaders
