@@ -68,6 +68,17 @@ def _load_milan_model(outcome_key: str):
     path = os.path.join(_MODELS_DIR, f"best_model_milan_{outcome_key}.keras")
     if not os.path.exists(path):
         return None, f"Model not found: `{path}`"
+    # Detect Git LFS pointer (file < 512 bytes and starts with "version https://")
+    size = os.path.getsize(path)
+    if size < 512:
+        with open(path, "rb") as fh:
+            head = fh.read(40)
+        if head.startswith(b"version https://git-lfs"):
+            return None, (
+                "Model file is a Git LFS pointer — the actual weights were not downloaded. "
+                "Ensure `git-lfs` is installed on the server (`packages.txt` must contain `git-lfs`) "
+                "and the repo was cloned with `git lfs pull`."
+            )
     return tf.keras.models.load_model(path, custom_objects={"weibull_loss": weibull_loss}), None
 
 
@@ -265,7 +276,7 @@ def _show_inference_block(df: pd.DataFrame, outcome_key: str):
     fmt = {c: "{:.3f}" for c in prob_cols + ["risk_score", "alpha_raw", "beta_raw"]}
     st.dataframe(
         df[display].style.format(fmt).background_gradient(subset=["risk_score"], cmap="RdYlGn_r"),
-        use_container_width=True, height=320,
+        width="stretch", height=320,
     )
 
     saved = _save_predictions(df, outcome_key)
@@ -287,7 +298,7 @@ def _show_c_matrix_block(c_matrix: np.ndarray):
     )
     st.dataframe(
         df_c.style.format("{:.4f}").background_gradient(cmap="RdYlGn", vmin=0.3, vmax=0.8),
-        use_container_width=True,
+        width="stretch",
     )
     st.metric("Mean C-Index", f"{float(np.nanmean(c_matrix)):.4f}")
 
@@ -338,7 +349,7 @@ if n_psa == 0:
     st.stop()
 
 with st.expander("Preview data"):
-    st.dataframe(df_raw.head(10), use_container_width=True)
+    st.dataframe(df_raw.head(10), width="stretch")
 
 if not st.button("Run", type="primary", use_container_width=True):
     st.stop()
