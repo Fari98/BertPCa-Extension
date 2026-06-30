@@ -315,7 +315,7 @@ def _show_inference_block(df: pd.DataFrame, outcome_key: str):
     )
 
 
-def _show_c_matrix_block(c_matrix: np.ndarray):
+def _show_c_matrix_block(c_matrix: np.ndarray) -> pd.DataFrame:
     df_c = pd.DataFrame(
         c_matrix,
         index=[f"p={int(p)}d" for p in P_TIMES],
@@ -327,8 +327,14 @@ def _show_c_matrix_block(c_matrix: np.ndarray):
     )
     st.metric("Mean C-Index", f"{float(np.nanmean(c_matrix)):.4f}")
 
-    saved = _save_c_matrix(c_matrix, "stklm0_train")
-    st.caption(f"Auto-saved to `{saved}`")
+    _save_c_matrix(c_matrix, "stklm0_train")
+    st.download_button(
+        "Download C-index table (CSV)",
+        df_c.to_csv().encode(),
+        file_name="c_index_stklm0.csv",
+        mime="text/csv",
+    )
+    return df_c
 
 
 # ---------------------------------------------------------------------------
@@ -428,4 +434,12 @@ else:
     model_path = os.path.join(_MODELS_DIR, "app_trained_stklm0_csm.keras")
     os.makedirs(_MODELS_DIR, exist_ok=True)
     model.save(model_path)
-    st.caption(f"Model saved to `{model_path}`")
+
+    with open(model_path, "rb") as fh:
+        model_bytes = fh.read()
+    st.download_button(
+        "Download trained model (.keras)",
+        model_bytes,
+        file_name="bertpca_stklm0_csm.keras",
+        mime="application/octet-stream",
+    )
