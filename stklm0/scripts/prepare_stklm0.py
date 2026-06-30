@@ -173,18 +173,22 @@ def split_and_impute(df_long: pd.DataFrame, static_cols: list,
     80/10/10 patient-level stratified split; median imputation fit on train.
     Returns (train, val, test, imputer).
     """
-    # .to_numpy() avoids PyArrow-backed Index errors in sklearn's _safe_indexing
-    unique_ids = df_long.index.unique().to_numpy()
-    labels     = df_long.groupby(level=0)["label"].first()
+    # Use plain Python lists to avoid PyArrow-backed Index / Series in sklearn.
+    # Any pandas fancy-indexing with a numpy array on a PyArrow-backed structure
+    # raises "only integer scalar arrays can be converted to a scalar index".
+    unique_ids = list(df_long.index.unique())
+    label_map  = df_long.groupby(level=0)["label"].first().to_dict()
+    strat_all  = [int(label_map[uid]) for uid in unique_ids]
     total_test = val_frac + test_frac
 
     train_ids, tmp_ids = train_test_split(
         unique_ids, test_size=total_test, random_state=random_state,
-        stratify=labels[unique_ids].to_numpy(),
+        stratify=strat_all,
     )
+    strat_tmp  = [int(label_map[uid]) for uid in tmp_ids]
     val_ids, test_ids = train_test_split(
         tmp_ids, test_size=test_frac / total_test, random_state=random_state,
-        stratify=labels[tmp_ids].to_numpy(),
+        stratify=strat_tmp,
     )
 
     train = df_long.loc[train_ids].copy()
