@@ -1,0 +1,47 @@
+{
+  "available_static": [
+    "d_diaage",
+    "d_spsa",
+    "t_clean_ord",
+    "isup_RP",
+    "pT_ord",
+    "pR_bin",
+    "pN_bin"
+  ],
+  "dynamic_features": [
+    "times",
+    "psa"
+  ],
+  "features_to_scale": [
+    "d_diaage",
+    "d_spsa",
+    "t_clean_ord",
+    "isup_RP",
+    "pT_ord",
+    "pR_bin",
+    "pN_bin",
+    "psa"
+  ],
+  "train_max": {
+    "d_diaage": 85.90006844626969,
+    "d_spsa": 1710.0,
+    "t_clean_ord": 3.0,
+    "isup_RP": 5.0,
+    "pT_ord": 3.0,
+    "pR_bin": 1.0,
+    "pN_bin": 1.0,
+    "psa": 1042013.0
+  },
+  "train_min": {
+    "d_diaage": 39.90965092402464,
+    "d_spsa": 0.03,
+    "t_clean_ord": 0.0,
+    "isup_RP": 1.0,
+    "pT_ord": 0.0,
+    "pR_bin": 0.0,
+    "pN_bin": 0.0,
+    "psa": 0.0
+  },
+  "t_max": 3650.0,
+  "model_path": "C:\\Users\\farinati.davide\\OneDrive - NOVAIMS\\Desktop\\BertPCa-Extension\\stklm0/outputs/models\\best_model_milan_csm.keras"
+}
