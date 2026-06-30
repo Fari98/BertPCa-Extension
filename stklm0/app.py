@@ -91,6 +91,21 @@ class _LegacyMHA(tf.keras.layers.MultiHeadAttention):
             key_shape = getattr(self.__class__, "_saved_key_shape", None)
         super().build(query_shape, value_shape, key_shape)
 
+    def call(self, query, value=None, key=None, **kwargs):
+        # Keras 3's H5 legacy loader fails to resolve inbound node references for
+        # multi-input layers; value/key arrive as raw list node specs instead of
+        # tensors.  This model uses self-attention (q=k=v), so substitute query.
+        if value is None or not hasattr(value, "shape"):
+            value = query
+        if key is not None and not hasattr(key, "shape"):
+            key = None
+        # Keras 2 serialises boolean call kwargs as strings.
+        if isinstance(kwargs.get("return_attention_scores"), str):
+            kwargs["return_attention_scores"] = (
+                kwargs["return_attention_scores"].lower() == "true"
+            )
+        return super().call(query, value=value, key=key, **kwargs)
+
 
 _CUSTOM_OBJECTS = {
     "weibull_loss":        weibull_loss,
