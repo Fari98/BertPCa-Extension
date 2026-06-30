@@ -14,6 +14,7 @@ import sys
 import warnings
 import numpy as np
 import pandas as pd
+from scipy.stats import linregress
 from sklearn.model_selection import train_test_split
 from sklearn.impute import SimpleImputer
 
@@ -25,16 +26,20 @@ T_MAX = 365.0  # 1 year in days (max observed ttIIEF / ttICIQ ~ 395 days)
 MIN_PSA_OBS = 1
 RANDOM_STATE = 42
 
+PSA_DERIVED = ["psa_nadir", "time_to_nadir", "psa_at_last_obs", "psa_slope", "n_psa_obs"]
+EXTRA_STATIC = ["QoL_pre", "drs_max"]
+
 EF_STATIC = [
     "nerve_sparing", "IIEF_EFdomain_pre", "age", "tpsa", "bmi",
     "pathgg_group", "ece_bin", "svi_bin", "psm", "lni_bin",
     "neo_adjHT", "pstage",
-]
+] + EXTRA_STATIC + PSA_DERIVED
+
 UC_STATIC = [
     "nerve_sparing", "IPSS_pre", "age", "tpsa", "bmi",
     "pathgg_group", "ece_bin", "svi_bin", "psm",
     "prostate_vol", "operative_time",
-]
+] + EXTRA_STATIC + PSA_DERIVED
 
 WRONG_DATE_VALS = {
     "20013": "2013", "2919": "2019", "3013": "2013", "2917": "2017",
@@ -122,6 +127,33 @@ def build_psa_long(df):
             records.append({"id": pid, "times": ti, "psa": pi})
 
     return pd.DataFrame(records)
+
+
+def compute_psa_features(psa_long: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute per-patient PSA summary statistics from the long-format PSA DataFrame.
+
+    Returns a DataFrame indexed by patient ID with columns:
+      psa_nadir, time_to_nadir, psa_at_last_obs, psa_slope, n_psa_obs
+
+    psa_slope is NaN for patients with only 1 observation (median-imputed downstream).
+    """
+    records = []
+    for pid, grp in psa_long.groupby("id"):
+        t = grp["times"].values  # sorted ascending (guaranteed by build_psa_long)
+        p = grp["psa"].values
+        n = len(t)
+        nadir_idx = int(np.argmin(p))
+        slope = float(linregress(t, p).slope) if n >= 2 else np.nan
+        records.append({
+            "id":              pid,
+            "psa_nadir":       float(p[nadir_idx]),
+            "time_to_nadir":   float(t[nadir_idx]),
+            "psa_at_last_obs": float(p[-1]),
+            "psa_slope":       slope,
+            "n_psa_obs":       float(n),
+        })
+    return pd.DataFrame(records).set_index("id")
 
 
 def assemble_outcome(df_static, psa_long, outcome_col, time_col, static_cols, label_name="label"):
@@ -229,6 +261,24 @@ def main():
     print("Building PSA long format ...")
     psa_long = build_psa_long(df)
     print(f"  {len(psa_long)} PSA observations across {psa_long['id'].nunique()} patients")
+
+    # --- PSA-derived static features ---
+    print("Computing PSA-derived static features ...")
+    psa_feats = compute_psa_features(psa_long)
+    df = df.join(psa_feats, how="left")
+    print(f"  Added: {list(psa_feats.columns)}")
+
+    # --- Complication severity (Clavien-Dindo proxy) ---
+    drs_cols = [f"DRS_{i}" for i in range(1, 6)]
+    avail_drs = [c for c in drs_cols if c in df.columns]
+    if avail_drs:
+        df["drs_max"] = df[avail_drs].fillna(0).max(axis=1)
+    else:
+        df["drs_max"] = 0.0
+
+    # --- Pre-operative Quality of Life ---
+    if "QoL_pre" not in df.columns:
+        df["QoL_pre"] = np.nan
 
     os.makedirs(OUT_DIR, exist_ok=True)
 

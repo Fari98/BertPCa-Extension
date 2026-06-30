@@ -42,6 +42,7 @@ research = [
     "pyreadr>=0.4.0",
     "scikit-survival>=0.22.0",
     "optuna>=3.0.0",
+    "boruta>=0.3",
 ]
 
 [build-system]
