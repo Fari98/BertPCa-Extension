@@ -101,20 +101,23 @@ def _load_milan_model(outcome_key: str):
                     "Ensure `packages.txt` contains `git-lfs`."
                 )
     return _load_keras_model(path), None
-    return model, None
 
 
 @st.cache_data(show_spinner=False)
 def _load_milan_params(outcome_key: str):
-    milan_path  = os.path.join(_MODELS_DIR, f"milan_{outcome_key}_scaling.json")
-    stklm0_path = os.path.join(_DATA_DIR, "preprocessing_params.json")
-    missing = [p for p in [milan_path, stklm0_path] if not os.path.exists(p)]
-    if missing:
-        return None, "Missing param files:\n" + "\n".join(f"  • {p}" for p in missing)
+    milan_path = os.path.join(_MODELS_DIR, f"milan_{outcome_key}_scaling.json")
+    if not os.path.exists(milan_path):
+        return None, f"Missing scaling file: `{milan_path}`"
     with open(milan_path) as f:
         milan = json.load(f)
-    with open(stklm0_path) as f:
-        stklm0 = json.load(f)
+    # preprocessing_params.json holds STKLM0 imputer medians; optional — if absent
+    # (e.g. first deployment before any training run), inference falls back to
+    # no imputation (uploaded data must be complete) and psa_max=1.
+    stklm0_path = os.path.join(_DATA_DIR, "preprocessing_params.json")
+    stklm0 = {}
+    if os.path.exists(stklm0_path):
+        with open(stklm0_path) as f:
+            stklm0 = json.load(f)
     return {
         "static_features":  milan["available_static"],
         "dynamic_features": milan.get("dynamic_features", ["times", "psa"]),
