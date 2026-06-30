@@ -315,6 +315,26 @@ def _show_inference_block(df: pd.DataFrame, outcome_key: str):
     )
 
 
+def _compute_cindex_simple(df_raw: pd.DataFrame, result_df: pd.DataFrame) -> float:
+    """Harrell's C-index from Milan model risk scores vs uploaded event data."""
+    try:
+        from lifelines.utils import concordance_index
+        exp_date = pd.to_datetime(df_raw["exp_date"], errors="coerce")
+        t_end    = pd.to_datetime(df_raw.get("t_end", pd.NaT), errors="coerce")
+        tte_map  = ((t_end - exp_date).dt.days).to_dict()
+        evt_map  = pd.to_numeric(df_raw.get("crmort", 0), errors="coerce").eq(1).to_dict()
+        pids  = result_df["patient_id"].tolist()
+        tte   = np.array([tte_map.get(p, np.nan) for p in pids], dtype=float)
+        event = np.array([evt_map.get(p, 0)       for p in pids], dtype=float)
+        risk  = result_df["risk_score"].values
+        mask  = np.isfinite(tte) & (tte > 0)
+        if mask.sum() < 5:
+            return np.nan
+        return float(concordance_index(tte[mask], -risk[mask], event[mask]))
+    except Exception:
+        return np.nan
+
+
 def _show_c_matrix_block(c_matrix: np.ndarray) -> pd.DataFrame:
     df_c = pd.DataFrame(
         c_matrix,
@@ -390,6 +410,7 @@ st.markdown("---")
 st.subheader("Milan Model Inference")
 bcr_col, csm_col = st.columns(2)
 
+milan_results: dict = {}
 for outcome_key, col in [("bcr", bcr_col), ("csm", csm_col)]:
     with col:
         st.markdown(f"**{outcome_key.upper()}**")
@@ -398,6 +419,7 @@ for outcome_key, col in [("bcr", bcr_col), ("csm", csm_col)]:
         if err:
             st.error(err)
         else:
+            milan_results[outcome_key] = result
             _show_inference_block(result, outcome_key)
 
 # ── Train & Evaluate ─────────────────────────────────────────────────────────
@@ -429,7 +451,41 @@ else:
 
     log_box.empty()
     st.success("Training complete.")
+    st.markdown("#### Time-dependent C-index (new STKLM0 model)")
     _show_c_matrix_block(c_matrix)
+
+    # ── Model comparison table ───────────────────────────────────────────────
+    has_event = all(c in df_raw.columns for c in ["crmort", "t_end"])
+    if has_event and milan_results:
+        st.markdown("#### Model Comparison (Harrell's C-index on uploaded data)")
+        rows = []
+        for ok, res in milan_results.items():
+            ci = _compute_cindex_simple(df_raw, res)
+            rows.append({
+                "Model":   f"Milan {ok.upper()} (pre-trained)",
+                "Outcome": ok.upper(),
+                "C-index": round(ci, 4) if not np.isnan(ci) else "—",
+            })
+        rows.append({
+            "Model":   "BertPCa STKLM0 (just trained)",
+            "Outcome": "CSM",
+            "C-index": round(float(np.nanmean(c_matrix)), 4),
+        })
+        df_cmp = pd.DataFrame(rows).set_index("Model")
+        st.dataframe(
+            df_cmp.style.highlight_max(subset=["C-index"], color="#d4edda"),
+            width="stretch",
+        )
+        st.caption(
+            "Milan C-index uses simple Harrell's concordance on the full uploaded cohort. "
+            "New model C-index is the mean time-dependent (IPCW) C-index on the held-out test split."
+        )
+        st.download_button(
+            "Download comparison table (CSV)",
+            df_cmp.reset_index().to_csv(index=False).encode(),
+            file_name="model_comparison.csv",
+            mime="text/csv",
+        )
 
     model_path = os.path.join(_MODELS_DIR, "app_trained_stklm0_csm.keras")
     os.makedirs(_MODELS_DIR, exist_ok=True)
