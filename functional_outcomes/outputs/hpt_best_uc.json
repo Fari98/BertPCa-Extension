@@ -1,0 +1,25 @@
+{
+  "outcome": "uc",
+  "static_features": [
+    "nerve_sparing",
+    "IPSS_pre",
+    "age",
+    "bmi"
+  ],
+  "n_trials": 50,
+  "best_val_nll": -13.385156393051147,
+  "params": {
+    "learning_rate": 5e-05,
+    "batch_size": 64,
+    "dropout": 0.3,
+    "gamma": 0.001,
+    "num_encoder_layers": 2,
+    "intermediate_dim": 256,
+    "num_heads": 2,
+    "num_conv_blocks": 1,
+    "filters": 128,
+    "kernel_size": 5,
+    "num_dense_layers": 3,
+    "dense_units": 256
+  }
+}

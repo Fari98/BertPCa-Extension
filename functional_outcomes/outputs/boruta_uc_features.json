@@ -1,0 +1,37 @@
+{
+  "outcome": "uc",
+  "candidates": [
+    "nerve_sparing",
+    "IPSS_pre",
+    "age",
+    "tpsa",
+    "bmi",
+    "pathgg_group",
+    "ece_bin",
+    "svi_bin",
+    "psm",
+    "prostate_vol",
+    "operative_time",
+    "QoL_pre",
+    "drs_max",
+    "psa_nadir",
+    "time_to_nadir",
+    "psa_at_last_obs",
+    "psa_slope",
+    "n_psa_obs"
+  ],
+  "confirmed": [
+    "nerve_sparing",
+    "IPSS_pre",
+    "age",
+    "bmi"
+  ],
+  "tentative": [],
+  "include_tentative": false,
+  "selected": [
+    "nerve_sparing",
+    "IPSS_pre",
+    "age",
+    "bmi"
+  ]
+}
