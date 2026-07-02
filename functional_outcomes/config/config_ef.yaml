@@ -57,8 +57,8 @@ training:
   verbose: "auto"
 
 evaluation:
-  p_times: [90, 120, 180]    # 3, 4, 6 months (IIEF>=26 events peak later)
-  e_times: [180, 270, 365]   # 6, 9, 12 months
+  p_times: [14, 30, 60]      # 2 weeks, 1 month, 2 months — before most events
+  e_times: [60, 120, 180]    # 2, 4, 6 months
 
 tuning:
   n_trials: 100

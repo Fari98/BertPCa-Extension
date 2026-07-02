@@ -35,8 +35,8 @@ _OUT_DIR   = os.path.join(_REPO_ROOT, "functional_outcomes", "outputs")
 SEP  = "=" * 65
 SEP2 = "-" * 65
 
-EF_P_TIMES = [90, 120, 180]
-EF_E_TIMES = [180, 270, 365]
+EF_P_TIMES = [14, 30, 60]
+EF_E_TIMES = [60, 120, 180]
 
 
 # ---------------------------------------------------------------------------
@@ -154,12 +154,14 @@ def _read_pipeline_cindex() -> np.ndarray | None:
         print(f"  [WARNING] Pipeline c-index not found: {path}")
         return None
     df = pd.read_csv(path)
-    # Rows: p_times, cols: e_time_180, e_time_270, e_time_365
     e_cols = [f"e_time_{int(e)}" for e in EF_E_TIMES]
     available = [c for c in e_cols if c in df.columns]
     if not available:
-        print(f"  [WARNING] Expected columns {e_cols} not found in {path}")
+        # Report what columns are actually present to aid debugging
+        print(f"  [WARNING] Expected {e_cols}, found: {list(df.columns)}")
         return None
+    if len(available) < len(e_cols):
+        print(f"  [WARNING] Only {len(available)}/{len(e_cols)} e_time columns found")
     matrix = df[available].values.astype(float)
     return matrix
 
