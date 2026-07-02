@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore")
 RDATA_PATH = os.path.join("data", "Master_Prostate_Milan_2025-09-22.RData")
 OUT_DIR = os.path.join("functional_outcomes", "data")
 T_MAX = 365.0  # 1 year in days (max observed ttIIEF / ttICIQ ~ 395 days)
-MIN_PSA_OBS = 1
+MIN_PSA_OBS = 3
 RANDOM_STATE = 42
 
 PSA_DERIVED = ["psa_nadir", "time_to_nadir", "psa_at_last_obs", "psa_slope", "n_psa_obs"]
@@ -282,11 +282,16 @@ def main():
 
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    # --- EF dataset ---
-    print("\nBuilding EF dataset (IIEF EF domain >= 17) ...")
+    # --- EF dataset (IIEF>=26: full recovery, harder threshold, longer tte) ---
+    # Restrict to patients with >= MIN_PSA_OBS PSA observations so the
+    # transformer has actual longitudinal signal to attend to.
+    psa_counts = psa_long.groupby("id").size()
+    ef_psa_long = psa_long[psa_long["id"].isin(psa_counts[psa_counts >= MIN_PSA_OBS].index)]
+    print(f"\nBuilding EF dataset (IIEF EF domain >= 26, PSA obs >= {MIN_PSA_OBS}) ...")
+    print(f"  Patients with >= {MIN_PSA_OBS} PSA obs: {ef_psa_long['id'].nunique()} / {psa_long['id'].nunique()}")
     ef_long = assemble_outcome(
-        df, psa_long,
-        outcome_col="IIEF_17", time_col="ttIIEF_17",
+        df, ef_psa_long,
+        outcome_col="IIEF_26", time_col="ttIIEF_26",
         static_cols=EF_STATIC,
     )
     print(f"  Patients: {ef_long.index.nunique()}, observations: {len(ef_long)}")

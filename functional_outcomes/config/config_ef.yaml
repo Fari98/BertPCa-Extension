@@ -1,4 +1,4 @@
-# Configuration for BertPCa on Erectile Function recovery (IIEF EF domain >= 17)
+# Configuration for BertPCa on Erectile Function recovery (IIEF EF domain >= 26, full recovery)
 
 seed: 42
 
@@ -27,7 +27,7 @@ dynamic_features:
 
 batch_size: 16
 seq_length: 16
-t_max: 365.0        # 1 year in days (max observed ttIIEF_17 ~ 358 days)
+t_max: 365.0        # 1 year in days (max observed ttIIEF_26 ~ 358 days)
 augment_data: true
 scale_features: true
 
@@ -57,17 +57,17 @@ training:
   verbose: "auto"
 
 evaluation:
-  p_times: [30, 60, 90]      # 1, 2, 3 months
-  e_times: [90, 180, 365]    # 3, 6, 12 months
+  p_times: [90, 120, 180]    # 3, 4, 6 months (IIEF>=26 events peak later)
+  e_times: [180, 270, 365]   # 6, 9, 12 months
 
 tuning:
   n_trials: 100
   direction: "minimize"
-  study_name: "bertpca_ef_optuna_study"
+  study_name: "bertpca_ef26_optuna_study"
 
 output_dir: "functional_outcomes/outputs"
 model_dir:  "functional_outcomes/outputs/models"
 results_dir: "functional_outcomes/outputs/results/ef"
 
-# Note: t_max set to 365 days — max observed ttIIEF_17 is ~358 days.
+# Note: t_max set to 365 days — max observed ttIIEF_26 is ~358 days.
 # p_times/e_times are in unscaled days; they are divided by t_max internally.

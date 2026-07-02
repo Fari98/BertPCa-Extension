@@ -328,7 +328,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="BertPCa pipeline: feature expansion → Boruta → HPT → training"
     )
-    parser.add_argument("--outcome", choices=["ef", "uc", "all"], default="all")
+    parser.add_argument("--outcome", choices=["ef", "uc", "all"], default="ef")
     parser.add_argument("--n-trials",         type=int,  default=50)
     parser.add_argument("--force",            action="store_true", help="Re-run all stages")
     parser.add_argument("--force-prepare",    action="store_true")

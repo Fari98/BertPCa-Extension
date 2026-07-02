@@ -64,7 +64,7 @@ def _run_trial(trial, train_ds, val_ds, config, n_features: int) -> float:
     learning_rate   = trial.suggest_categorical("learning_rate",    [1e-6, 5e-6, 1e-5, 5e-5])
     batch_size      = trial.suggest_categorical("batch_size",       [16, 32, 64])
     dropout         = trial.suggest_categorical("dropout",          [0.1, 0.2, 0.3, 0.4])
-    gamma           = trial.suggest_categorical("gamma",            [0.0, 0.001, 0.01, 0.1])
+    gamma           = trial.suggest_categorical("gamma",            [0.1, 0.3, 0.5, 1.0])
     num_encoder_layers = trial.suggest_categorical("num_encoder_layers", [1, 2])
     intermediate_dim   = trial.suggest_categorical("intermediate_dim",   [64, 128, 256])
     num_heads          = trial.suggest_categorical("num_heads",          [2, 4])

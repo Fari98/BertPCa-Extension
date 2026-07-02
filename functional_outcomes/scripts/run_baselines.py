@@ -43,8 +43,8 @@ OUTCOME_CFG = {
             "pathgg_group", "ece_bin", "svi_bin", "psm", "lni_bin",
             "neo_adjHT", "pstage",
         ],
-        "p_times": np.array([30.0, 60.0, 90.0]),
-        "e_times": np.array([90.0, 180.0, 365.0]),
+        "p_times": np.array([90.0, 120.0, 180.0]),   # IIEF>=26 events peak later
+        "e_times": np.array([180.0, 270.0, 365.0]),
         "t_max": 365.0,
     },
     "uc": {
