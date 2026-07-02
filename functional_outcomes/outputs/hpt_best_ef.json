@@ -1,0 +1,28 @@
+{
+  "outcome": "ef",
+  "static_features": [
+    "nerve_sparing",
+    "IIEF_EFdomain_pre",
+    "age",
+    "tpsa",
+    "bmi",
+    "pathgg_group",
+    "pstage"
+  ],
+  "n_trials": 50,
+  "best_val_nll": -5.499006271362305,
+  "params": {
+    "learning_rate": 5e-05,
+    "batch_size": 64,
+    "dropout": 0.1,
+    "gamma": 1.0,
+    "num_encoder_layers": 2,
+    "intermediate_dim": 256,
+    "num_heads": 4,
+    "num_conv_blocks": 3,
+    "filters": 128,
+    "kernel_size": 5,
+    "num_dense_layers": 2,
+    "dense_units": 128
+  }
+}

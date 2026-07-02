@@ -1,0 +1,44 @@
+{
+  "outcome": "ef",
+  "candidates": [
+    "nerve_sparing",
+    "IIEF_EFdomain_pre",
+    "age",
+    "tpsa",
+    "bmi",
+    "pathgg_group",
+    "ece_bin",
+    "svi_bin",
+    "psm",
+    "lni_bin",
+    "neo_adjHT",
+    "pstage",
+    "QoL_pre",
+    "drs_max",
+    "psa_nadir",
+    "time_to_nadir",
+    "psa_at_last_obs",
+    "psa_slope",
+    "n_psa_obs"
+  ],
+  "confirmed": [
+    "nerve_sparing",
+    "IIEF_EFdomain_pre",
+    "age",
+    "tpsa",
+    "bmi",
+    "pathgg_group",
+    "pstage"
+  ],
+  "tentative": [],
+  "include_tentative": false,
+  "selected": [
+    "nerve_sparing",
+    "IIEF_EFdomain_pre",
+    "age",
+    "tpsa",
+    "bmi",
+    "pathgg_group",
+    "pstage"
+  ]
+}
