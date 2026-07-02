@@ -244,33 +244,29 @@ def main():
                         help="Optuna storage URL for resumable HPT "
                              "(e.g. sqlite:///functional_outcomes/outputs/hpt.db)")
 
-    # Skip flags
-    parser.add_argument("--skip-baselines",   action="store_true",
-                        help="Skip baseline evaluation (useful if already run)")
-    parser.add_argument("--skip-pipeline",    action="store_true",
+    # Opt-out flags — use these to skip individual stages
+    parser.add_argument("--skip-baselines",  action="store_true",
+                        help="Skip baseline evaluation")
+    parser.add_argument("--skip-pipeline",   action="store_true",
                         help="Skip BertPCa pipeline (Boruta+HPT+train)")
-
-    # Force flags — individual stages
-    parser.add_argument("--force",            action="store_true",
-                        help="Re-run all stages from scratch")
-    parser.add_argument("--force-prepare",    action="store_true")
-    parser.add_argument("--force-baselines",  action="store_true")
-    parser.add_argument("--force-boruta",     action="store_true")
-    parser.add_argument("--force-hpt",        action="store_true")
-    parser.add_argument("--force-train",      action="store_true")
+    parser.add_argument("--skip-prepare",    action="store_true",
+                        help="Skip dataset preparation (reuse existing CSVs)")
+    parser.add_argument("--skip-boruta",     action="store_true",
+                        help="Skip Boruta (reuse cached boruta_ef_features.json)")
+    parser.add_argument("--skip-hpt",        action="store_true",
+                        help="Skip HPT (reuse cached hpt_best_ef.json)")
 
     args = parser.parse_args()
-    fa = args.force
 
     print(f"\n{SEP}")
     print(f"  BertPCa — Erectile Function (IIEF>=26) full pipeline")
     print(f"  n_trials={args.n_trials}  storage={args.storage or 'in-memory'}")
     print(SEP)
 
-    step_prepare(force=args.force_prepare or fa)
+    step_prepare(force=not args.skip_prepare)
 
     if not args.skip_baselines:
-        step_baselines(force=args.force_baselines or fa)
+        step_baselines(force=True)
     else:
         print("\n[SKIP] Baselines (--skip-baselines)")
 
@@ -278,9 +274,9 @@ def main():
         step_bertpca_pipeline(
             n_trials=args.n_trials,
             storage=args.storage,
-            force_boruta=args.force_boruta or fa,
-            force_hpt=args.force_hpt    or fa,
-            force_train=args.force_train or fa,
+            force_boruta=not args.skip_boruta,
+            force_hpt=not args.skip_hpt,
+            force_train=True,
         )
     else:
         print("\n[SKIP] BertPCa pipeline (--skip-pipeline)")
