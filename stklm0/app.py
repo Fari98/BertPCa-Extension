@@ -431,6 +431,9 @@ if not selected_outcomes and not run_training:
     st.warning("Select at least one outcome or enable training.")
     st.stop()
 
+# Accumulated for the download-all bundle
+_bundle: dict[str, bytes] = {}   # {filename_in_zip: bytes}
+
 # ── Milan Inference ─────────────────────────────────────────────────────────
 milan_results: dict = {}
 if selected_outcomes:
@@ -447,6 +450,7 @@ if selected_outcomes:
             else:
                 milan_results[outcome_key] = result
                 _show_inference_block(result, outcome_key)
+                _bundle[f"predictions_{outcome_key}.csv"] = result.to_csv(index=False).encode()
 
 # ── Train & Evaluate ─────────────────────────────────────────────────────────
 st.markdown("---")
@@ -476,7 +480,8 @@ else:
     log_box.empty()
     st.success("Training complete.")
     st.markdown("#### Time-dependent C-index (new STKLM0 model)")
-    _show_c_matrix_block(c_matrix)
+    df_c = _show_c_matrix_block(c_matrix)
+    _bundle["c_index_stklm0.csv"] = df_c.to_csv().encode()
 
     # ── Model comparison table ───────────────────────────────────────────────
     has_event = all(c in df_raw.columns for c in ["crmort", "t_end"])
@@ -504,12 +509,14 @@ else:
             "Milan C-index uses simple Harrell's concordance on the full uploaded cohort. "
             "New model C-index is the mean time-dependent (IPCW) C-index on the held-out test split."
         )
+        cmp_bytes = df_cmp.reset_index().to_csv(index=False).encode()
         st.download_button(
             "Download comparison table (CSV)",
-            df_cmp.reset_index().to_csv(index=False).encode(),
+            cmp_bytes,
             file_name="model_comparison.csv",
             mime="text/csv",
         )
+        _bundle["model_comparison.csv"] = cmp_bytes
 
     model_path = os.path.join(_MODELS_DIR, "app_trained_stklm0_csm.keras")
     os.makedirs(_MODELS_DIR, exist_ok=True)
@@ -522,4 +529,23 @@ else:
         model_bytes,
         file_name="bertpca_stklm0_csm.keras",
         mime="application/octet-stream",
+    )
+    _bundle["bertpca_stklm0_csm.keras"] = model_bytes
+
+# ── Download all results ──────────────────────────────────────────────────────
+if _bundle:
+    import io, zipfile as _zf
+    st.markdown("---")
+    buf = io.BytesIO()
+    with _zf.ZipFile(buf, "w", compression=_zf.ZIP_DEFLATED) as zf:
+        for fname, data in _bundle.items():
+            zf.writestr(fname, data)
+    buf.seek(0)
+    st.download_button(
+        "Download all results (.zip)",
+        buf.getvalue(),
+        file_name=f"bertpca_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+        mime="application/zip",
+        type="primary",
+        use_container_width=True,
     )
