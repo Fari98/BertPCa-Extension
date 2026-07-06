@@ -21,10 +21,12 @@ flag overrides. Run from the repo root:
 import os
 import sys
 import csv
+import zipfile
 import argparse
 import subprocess
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _PYTHON    = sys.executable
@@ -231,6 +233,50 @@ def step_compare() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Step 5 — Bundle all results into a single zip
+# ---------------------------------------------------------------------------
+
+_BUNDLE_FILES = [
+    # comparison tables
+    ("outputs/full_results_ef.csv",                             "full_results_ef.csv"),
+    ("outputs/baseline_results_ef.csv",                         "baseline_results_ef.csv"),
+    # pipeline internals
+    ("outputs/boruta_ef_features.json",                         "boruta_ef_features.json"),
+    ("outputs/hpt_best_ef.json",                                "hpt_best_ef.json"),
+    # BertPCa evaluation
+    ("outputs/results/ef/pipeline/c_index_table.csv",           "bertpca_c_index_table.csv"),
+    ("outputs/results/ef/training_log.txt",                     "bertpca_training_log.txt"),
+]
+
+
+def step_bundle() -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    zip_name  = f"ef_results_{timestamp}.zip"
+    zip_path  = os.path.join(_OUT_DIR, zip_name)
+
+    _hdr("Step 5 — Bundle results")
+
+    added, missing = [], []
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for rel, arcname in _BUNDLE_FILES:
+            src = os.path.join(_REPO_ROOT, "functional_outcomes", rel)
+            if os.path.exists(src):
+                zf.write(src, arcname)
+                added.append(arcname)
+            else:
+                missing.append(arcname)
+
+    if added:
+        print(f"\n  Bundled {len(added)} file(s) → {zip_path}")
+        for f in added:
+            print(f"    {f}")
+    if missing:
+        print(f"\n  Skipped (not found): {missing}")
+
+    return zip_path
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -283,7 +329,9 @@ def main():
 
     step_compare()
 
-    print(f"\n{SEP}\n  Done.\n{SEP}\n")
+    zip_path = step_bundle()
+
+    print(f"\n{SEP}\n  Done.  Download: {zip_path}\n{SEP}\n")
 
 
 if __name__ == "__main__":
