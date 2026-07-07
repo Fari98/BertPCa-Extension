@@ -5,24 +5,22 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
-    "bmi",
-    "pathgg_group",
-    "pstage"
+    "pathgg_group"
   ],
   "n_trials": 50,
-  "best_val_nll": -5.499006271362305,
+  "best_val_nll": -2.063260078430176,
   "params": {
     "learning_rate": 5e-05,
     "batch_size": 64,
-    "dropout": 0.1,
-    "gamma": 1.0,
+    "dropout": 0.3,
+    "gamma": 0.1,
     "num_encoder_layers": 2,
-    "intermediate_dim": 256,
+    "intermediate_dim": 64,
     "num_heads": 4,
-    "num_conv_blocks": 3,
-    "filters": 128,
-    "kernel_size": 5,
+    "num_conv_blocks": 1,
+    "filters": 64,
+    "kernel_size": 3,
     "num_dense_layers": 2,
-    "dense_units": 128
+    "dense_units": 256
   }
 }

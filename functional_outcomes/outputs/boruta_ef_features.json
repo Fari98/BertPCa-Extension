@@ -26,9 +26,7 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
-    "bmi",
-    "pathgg_group",
-    "pstage"
+    "pathgg_group"
   ],
   "tentative": [],
   "include_tentative": false,
@@ -37,8 +35,6 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
-    "bmi",
-    "pathgg_group",
-    "pstage"
+    "pathgg_group"
   ]
 }
