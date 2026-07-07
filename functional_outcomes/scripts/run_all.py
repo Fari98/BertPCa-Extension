@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-End-to-end functional outcomes pipeline for EF (IIEF >= 26).
+End-to-end functional outcomes pipeline for EF (IIEF >= 17).
 
 Steps
 -----
@@ -14,7 +14,6 @@ flag overrides. Run from the repo root:
 
   python functional_outcomes/scripts/run_all.py
   python functional_outcomes/scripts/run_all.py --n-trials 100
-  python functional_outcomes/scripts/run_all.py --force
   python functional_outcomes/scripts/run_all.py --skip-baselines --force-train
 """
 
@@ -84,7 +83,7 @@ def step_prepare(force: bool) -> None:
               "(use --force-prepare to regenerate)")
         return
     _run(
-        "Step 1 — Prepare EF dataset from Milan RData (IIEF>=26, PSA>=3 obs)",
+        "Step 1 — Prepare EF dataset from Milan RData (IIEF>=17, full cohort)",
         [os.path.join(_SCRIPTS, "prepare_dataset.py")],
     )
 
@@ -212,7 +211,7 @@ def step_compare() -> None:
         return
 
     # Pretty-print
-    print(f"\n  EF (IIEF>=26) — time-dependent C-index on test set")
+    print(f"\n  EF (IIEF>=17) — time-dependent C-index on test set")
     print(f"  Prediction times: {EF_P_TIMES}d | Evaluation times: {EF_E_TIMES}d\n")
     print(df_bl.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
 
@@ -305,7 +304,7 @@ def main():
     args = parser.parse_args()
 
     print(f"\n{SEP}")
-    print(f"  BertPCa — Erectile Function (IIEF>=26) full pipeline")
+    print(f"  BertPCa — Erectile Function (IIEF>=17) full pipeline")
     print(f"  n_trials={args.n_trials}  storage={args.storage or 'in-memory'}")
     print(SEP)
 

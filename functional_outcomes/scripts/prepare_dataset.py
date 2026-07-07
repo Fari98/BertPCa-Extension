@@ -282,16 +282,14 @@ def main():
 
     os.makedirs(OUT_DIR, exist_ok=True)
 
-    # --- EF dataset (IIEF>=26: full recovery, harder threshold, longer tte) ---
-    # Restrict to patients with >= MIN_PSA_OBS PSA observations so the
-    # transformer has actual longitudinal signal to attend to.
+    # --- EF dataset (IIEF>=17: any EF recovery, full cohort) ---
     psa_counts = psa_long.groupby("id").size()
     ef_psa_long = psa_long[psa_long["id"].isin(psa_counts[psa_counts >= MIN_PSA_OBS].index)]
-    print(f"\nBuilding EF dataset (IIEF EF domain >= 26, PSA obs >= {MIN_PSA_OBS} = full cohort) ...")
+    print(f"\nBuilding EF dataset (IIEF EF domain >= 17, PSA obs >= {MIN_PSA_OBS} = full cohort) ...")
     print(f"  Patients with >= {MIN_PSA_OBS} PSA obs: {ef_psa_long['id'].nunique()} / {psa_long['id'].nunique()}")
     ef_long = assemble_outcome(
         df, ef_psa_long,
-        outcome_col="IIEF_26", time_col="ttIIEF_26",
+        outcome_col="IIEF_17", time_col="ttIIEF_17",
         static_cols=EF_STATIC,
     )
     print(f"  Patients: {ef_long.index.nunique()}, observations: {len(ef_long)}")
