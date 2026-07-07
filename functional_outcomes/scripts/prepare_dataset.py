@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore")
 RDATA_PATH = os.path.join("data", "Master_Prostate_Milan_2025-09-22.RData")
 OUT_DIR = os.path.join("functional_outcomes", "data")
 T_MAX = 365.0  # 1 year in days (max observed ttIIEF / ttICIQ ~ 395 days)
-MIN_PSA_OBS = 3
+MIN_PSA_OBS = 1
 RANDOM_STATE = 42
 
 PSA_DERIVED = ["psa_nadir", "time_to_nadir", "psa_at_last_obs", "psa_slope", "n_psa_obs"]
@@ -287,7 +287,7 @@ def main():
     # transformer has actual longitudinal signal to attend to.
     psa_counts = psa_long.groupby("id").size()
     ef_psa_long = psa_long[psa_long["id"].isin(psa_counts[psa_counts >= MIN_PSA_OBS].index)]
-    print(f"\nBuilding EF dataset (IIEF EF domain >= 26, PSA obs >= {MIN_PSA_OBS}) ...")
+    print(f"\nBuilding EF dataset (IIEF EF domain >= 26, PSA obs >= {MIN_PSA_OBS} = full cohort) ...")
     print(f"  Patients with >= {MIN_PSA_OBS} PSA obs: {ef_psa_long['id'].nunique()} / {psa_long['id'].nunique()}")
     ef_long = assemble_outcome(
         df, ef_psa_long,
