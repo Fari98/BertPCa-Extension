@@ -33,8 +33,10 @@ from config.load_config import load_yaml_config
 
 _CONFIG_DIR = os.path.join(_REPO_ROOT, "functional_outcomes", "config")
 _CONFIG_MAP = {
-    "ef": os.path.join(_CONFIG_DIR, "config_ef.yaml"),
-    "uc": os.path.join(_CONFIG_DIR, "config_uc.yaml"),
+    "ef":     os.path.join(_CONFIG_DIR, "config_ef.yaml"),
+    "uc":     os.path.join(_CONFIG_DIR, "config_uc.yaml"),
+    "ef_uri": os.path.join(_CONFIG_DIR, "config_ef_uri.yaml"),
+    "uc_uri": os.path.join(_CONFIG_DIR, "config_uc_uri.yaml"),
 }
 
 
@@ -162,8 +164,8 @@ def train_model(config, output_path=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Train BertPCa on functional outcomes")
-    parser.add_argument("--outcome", choices=["ef", "uc", "all"], default="all",
-                        help="Outcome to train on: 'ef', 'uc', or 'all' (default: all)")
+    parser.add_argument("--outcome", choices=["ef", "uc", "all", "ef_uri", "uc_uri"], default="all",
+                        help="Outcome to train on (default: all PSA-based)")
     parser.add_argument("--output", type=str, default=None,
                         help="Path to save the trained model (.keras) — only used when --outcome is ef or uc")
     args = parser.parse_args()
