@@ -387,22 +387,45 @@ def _show_inference_block(df: pd.DataFrame, outcome_key: str):
     )
 
 
+def _compute_cindex_per_etime(df_raw: pd.DataFrame, result_df: pd.DataFrame) -> dict:
+    """
+    Harrell's C-index from Milan model predictions vs uploaded event data,
+    computed separately at each e_time using the matching P(T>e_time) column.
+    Returns {e_time_int: c_index_float}.
+    """
+    from lifelines.utils import concordance_index
+    exp_date = pd.to_datetime(df_raw["exp_date"], errors="coerce")
+    t_end    = pd.to_datetime(df_raw.get("t_end", pd.NaT), errors="coerce")
+    tte_days = (t_end - exp_date).dt.days
+    tte_map  = tte_days.to_dict()
+    evt_map  = pd.to_numeric(df_raw.get("crmort", 0), errors="coerce").eq(1).to_dict()
+
+    pids  = result_df["patient_id"].tolist()
+    tte   = np.array([tte_map.get(p, np.nan) for p in pids], dtype=float)
+    event = np.array([evt_map.get(p, 0)       for p in pids], dtype=float)
+    mask  = np.isfinite(tte) & (tte > 0)
+
+    out = {}
+    for e in E_TIMES:
+        col = f"P(T>{int(e)}d)"
+        if col not in result_df.columns or mask.sum() < 5:
+            out[int(e)] = np.nan
+            continue
+        try:
+            surv = result_df[col].values.astype(float)
+            risk = 1.0 - surv          # higher risk = shorter survival
+            out[int(e)] = float(concordance_index(tte[mask], -risk[mask], event[mask]))
+        except Exception:
+            out[int(e)] = np.nan
+    return out
+
+
 def _compute_cindex_simple(df_raw: pd.DataFrame, result_df: pd.DataFrame) -> float:
-    """Harrell's C-index from Milan model risk scores vs uploaded event data."""
+    """Overall Harrell's C using the first-horizon risk score (backward compat)."""
     try:
-        from lifelines.utils import concordance_index
-        exp_date = pd.to_datetime(df_raw["exp_date"], errors="coerce")
-        t_end    = pd.to_datetime(df_raw.get("t_end", pd.NaT), errors="coerce")
-        tte_map  = ((t_end - exp_date).dt.days).to_dict()
-        evt_map  = pd.to_numeric(df_raw.get("crmort", 0), errors="coerce").eq(1).to_dict()
-        pids  = result_df["patient_id"].tolist()
-        tte   = np.array([tte_map.get(p, np.nan) for p in pids], dtype=float)
-        event = np.array([evt_map.get(p, 0)       for p in pids], dtype=float)
-        risk  = result_df["risk_score"].values
-        mask  = np.isfinite(tte) & (tte > 0)
-        if mask.sum() < 5:
-            return np.nan
-        return float(concordance_index(tte[mask], -risk[mask], event[mask]))
+        ci_map = _compute_cindex_per_etime(df_raw, result_df)
+        vals = [v for v in ci_map.values() if not np.isnan(v)]
+        return float(np.mean(vals)) if vals else np.nan
     except Exception:
         return np.nan
 
@@ -425,18 +448,22 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
     """Display a comparison table of all models."""
     rows = []
 
-    # Milan pre-trained models (Harrell's C on full cohort)
+    # Milan pre-trained models (Harrell's C on full cohort, per e_time)
     has_event = all(c in df_raw.columns for c in ["crmort", "t_end"])
     if has_event:
         for ok, res in milan_results.items():
-            ci = _compute_cindex_simple(df_raw, res)
-            rows.append({
+            ci_map = _compute_cindex_per_etime(df_raw, res)
+            mean_ci = float(np.nanmean(list(ci_map.values())))
+            row = {
                 "Model": f"Milan {ok.upper()} (pre-trained)",
                 "Type": "Weibull",
-                **{f"e={int(e)}d (mean p)": "—" for e in E_TIMES},
-                "Mean C-index": round(ci, 4) if not np.isnan(ci) else "—",
+                "Mean C-index": round(mean_ci, 4) if not np.isnan(mean_ci) else "—",
                 "Note": "Harrell C on full cohort",
-            })
+            }
+            for e in E_TIMES:
+                v = ci_map.get(int(e), np.nan)
+                row[f"e={int(e)}d (mean p)"] = round(v, 4) if not np.isnan(v) else "—"
+            rows.append(row)
 
     # Baselines (CoxPH, RSF, DDH)
     for name, mat in baseline_results.items():
