@@ -520,8 +520,11 @@ except Exception as exc:
     st.error(f"Could not parse CSV: {exc}")
     st.stop()
 
-id_col = "id" if "id" in df_raw.columns else df_raw.columns[0]
-df_raw = df_raw.set_index(id_col)
+if "id" in df_raw.columns:
+    df_raw = df_raw.set_index("id")
+else:
+    # No id column — assign sequential integers so no data column is consumed
+    df_raw.index = range(len(df_raw))
 df_raw.index.name = "id"
 
 n_psa = sum(1 for c in df_raw.columns if c.startswith("PSA") and not c.startswith("psadate"))
