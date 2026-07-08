@@ -64,6 +64,7 @@ def preprocess_for_inference(df_raw: pd.DataFrame, params: dict) -> pd.DataFrame
     # Assemble long format with placeholder tte/label (not needed for inference)
     valid_ids = df_static.index.intersection(psa_long["id"].unique())
     df_s = df_static.loc[valid_ids, static_features].copy()
+    df_s = df_s[~df_s.index.duplicated(keep="first")]  # guard against duplicate patient IDs
     df_s["tte"]   = t_max   # placeholder
     df_s["label"] = 0       # placeholder
     df_s["t_last"] = (
