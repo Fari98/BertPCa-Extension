@@ -93,7 +93,7 @@ def build_psa_long_stklm0(df: pd.DataFrame, t_max: float = T_MAX, n_psa: int = N
         lambda col: col.dt.days if hasattr(col, "dt") else col.map(
             lambda x: x.days if pd.notna(x) else np.nan
         )
-    )
+    ).astype("float64")   # nullable Int64 → plain float64 so np.isnan works
     df_psa = df[psa_cols].copy().apply(pd.to_numeric, errors="coerce")
 
     neg_mask = df_days < 0
