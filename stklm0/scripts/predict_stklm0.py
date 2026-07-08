@@ -93,6 +93,13 @@ def preprocess_for_inference(df_raw: pd.DataFrame, params: dict) -> pd.DataFrame
         if col in medians:
             df_long[col] = df_long[col].fillna(medians[col])
 
+    # Fallback: fill any remaining NaN (e.g. codebook-mapped unknowns when
+    # preprocessing_params.json is absent or incomplete) with batch median
+    for col in static_features:
+        if df_long[col].isna().any():
+            fallback = df_long[col].median()
+            df_long[col] = df_long[col].fillna(0.0 if np.isnan(fallback) else fallback)
+
     # Apply the same min-max scaling that load_and_preprocess_data() applies during training.
     # train_max and train_min were computed from the post-imputation training split and
     # saved to preprocessing_params.json by prepare_stklm0.py.
@@ -181,6 +188,7 @@ def run(input_path: str, model_path: str, params_path: str,
 
     # ---- Compute survival probabilities ------------------------------------------
     t_last_days = t_last_series.loc[patient_ids].values
+    t_last_days = np.where(np.isnan(t_last_days), 0.0, t_last_days)
     t_last_scaled = t_last_days / t_max
 
     print(f"Computing survival at e_times: {e_times} days ...")

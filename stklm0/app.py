@@ -153,6 +153,7 @@ def _milan_inference(df_raw: pd.DataFrame, outcome_key: str):
     raw_preds = model.predict(features, verbose=0)
     alpha_raw, beta_raw = raw_preds[:, 0], raw_preds[:, 1]
     t_last_days = t_last_series.loc[patient_ids].values
+    t_last_days = np.where(np.isnan(t_last_days), 0.0, t_last_days)
     probs = compute_survival(alpha_raw, beta_raw, t_last_days / params["t_max"], E_TIMES, params["t_max"])
 
     out = pd.DataFrame({
