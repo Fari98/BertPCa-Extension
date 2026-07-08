@@ -37,12 +37,10 @@ for _p in [
 _MODELS_DIR  = os.path.join(_APP_DIR, "outputs", "models")
 _DATA_DIR    = os.path.join(_APP_DIR, "data")
 _PRED_DIR    = os.path.join(_APP_DIR, "outputs", "predictions")
-_RESULTS_DIR = os.path.join(_APP_DIR, "outputs", "results")
 _CONFIG_PATH = os.path.join(_APP_DIR, "config", "config_stklm0.yaml")
 
 # Fixed evaluation parameters
-E_TIMES  = [365, 1825, 3650]   # 1y, 5y, 10y
-P_TIMES  = [180, 365, 730]     # 6m, 1y, 2y (landmarks for training eval)
+E_TIMES = [365, 1825, 3650]   # 1y, 5y, 10y
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -172,96 +170,6 @@ def _milan_inference(df_raw: pd.DataFrame, outcome_key: str):
 
 
 # ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
-
-def _prepare_in_memory(df_raw: pd.DataFrame, t_max: float):
-    from prepare_stklm0 import (
-        encode_stklm0_features, build_psa_long_stklm0,
-        assemble_long_format, split_and_impute, STATIC_COLS,
-    )
-    df = df_raw.copy()
-    df["label"] = (pd.to_numeric(df.get("crmort", 0), errors="coerce") == 1).astype(int)
-    exp_date = pd.to_datetime(df["exp_date"], errors="coerce")
-    t_end    = pd.to_datetime(df.get("t_end",  pd.NaT), errors="coerce")
-    df["tte"] = (t_end - exp_date).dt.days.clip(lower=1, upper=t_max)
-
-    df_static = encode_stklm0_features(df)
-    psa_long  = build_psa_long_stklm0(df, t_max=t_max)
-    df_long   = assemble_long_format(df_static, df[["label", "tte"]], psa_long, STATIC_COLS)
-    train, val, test, imp = split_and_impute(df_long, STATIC_COLS)
-    return train, val, test, STATIC_COLS
-
-
-def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
-    import tempfile
-    import tensorflow as tf
-    from tensorflow import keras
-    from bertpca import build_bert_pca, training_loop, calculate_time_dependent_c_index, set_seeds
-    from config.load_config import load_yaml_config
-
-    def log(msg):
-        if log_fn:
-            log_fn(msg)
-
-    config = load_yaml_config(_CONFIG_PATH)
-    set_seeds(config.SEED)
-
-    log("Preparing data …")
-    train, val, test, static_cols = _prepare_in_memory(df_raw, config.T_MAX)
-    log(f"Split — train: {train.index.nunique()} · val: {val.index.nunique()} · test: {test.index.nunique()} patients")
-
-    tmp = tempfile.mkdtemp()
-    for name, split in [("train", train), ("val", val), ("test", test)]:
-        split.reset_index().to_csv(os.path.join(tmp, f"{name}.csv"), index=False)
-
-    log("Building TensorFlow datasets …")
-    train_ds, val_ds, test_ds, y_train, y_val, y_test = (
-        __import__("bertpca").load_and_preprocess_data(
-            os.path.join(tmp, "train.csv"),
-            os.path.join(tmp, "val.csv"),
-            os.path.join(tmp, "test.csv"),
-            static_cols, config.DYNAMIC_FEATURES,
-            config.SEQ_LENGTH, config.BATCH_SIZE,
-            config.T_MAX, config.AUGMENT_DATA, config.SCALE_FEATURES,
-        )
-    )
-
-    n_features = len(static_cols) + len(config.DYNAMIC_FEATURES)
-    log(f"Building model ({n_features} features) …")
-    keras.backend.clear_session()
-    model = build_bert_pca(n_features=n_features, seq_length=config.SEQ_LENGTH, **config.MODEL_CONFIG)
-
-    X_train = np.array(train_ds["features"])
-    y_train_surv = np.array(train_ds["labels_surv"])
-    X_val   = np.array(val_ds["features"])
-    y_val_surv   = np.array(val_ds["labels_surv"])
-
-    bs = config.TRAINING_CONFIG["batch_size"]
-    train_tf = tf.data.Dataset.from_tensor_slices((X_train, y_train_surv)).shuffle(1024).batch(bs)
-    val_tf   = tf.data.Dataset.from_tensor_slices((X_val,   y_val_surv)).batch(bs)
-
-    log("Training BertPCa … (this may take several minutes)")
-    model, _ = training_loop(
-        model, train_tf, val_tf,
-        y_train=y_train, y_val=y_val,
-        training_config=config.TRAINING_CONFIG,
-        evaluation_config=config.EVALUATION_CONFIG,
-        c_index_interval=999,
-    )
-
-    log("Evaluating on test set …")
-    c_matrix = calculate_time_dependent_c_index(
-        np.array(test_ds["features"]), y_train, y_test, model,
-        p_times=np.array(P_TIMES, dtype=float),
-        e_times=np.array(E_TIMES,  dtype=float),
-        t_max=config.EVALUATION_CONFIG["t_max"],
-        return_mean=False,
-    )
-    return model, c_matrix
-
-
-# ---------------------------------------------------------------------------
 # Results saving
 # ---------------------------------------------------------------------------
 
@@ -270,19 +178,6 @@ def _save_predictions(df: pd.DataFrame, outcome_key: str) -> str:
     ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = os.path.join(_PRED_DIR, f"predictions_{outcome_key}_{ts}.csv")
     df.to_csv(path, index=False)
-    return path
-
-
-def _save_c_matrix(c_matrix: np.ndarray, tag: str) -> str:
-    os.makedirs(_RESULTS_DIR, exist_ok=True)
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = os.path.join(_RESULTS_DIR, f"c_index_{tag}_{ts}.csv")
-    df_c = pd.DataFrame(
-        c_matrix,
-        index=[f"p={int(p)}d" for p in P_TIMES],
-        columns=[f"e={int(e)}d" for e in E_TIMES],
-    )
-    df_c.to_csv(path)
     return path
 
 
@@ -315,48 +210,6 @@ def _show_inference_block(df: pd.DataFrame, outcome_key: str):
     )
 
 
-def _compute_cindex_simple(df_raw: pd.DataFrame, result_df: pd.DataFrame) -> float:
-    """Harrell's C-index from Milan model risk scores vs uploaded event data."""
-    try:
-        from lifelines.utils import concordance_index
-        exp_date = pd.to_datetime(df_raw["exp_date"], errors="coerce")
-        t_end    = pd.to_datetime(df_raw.get("t_end", pd.NaT), errors="coerce")
-        tte_map  = ((t_end - exp_date).dt.days).to_dict()
-        evt_map  = pd.to_numeric(df_raw.get("crmort", 0), errors="coerce").eq(1).to_dict()
-        pids  = result_df["patient_id"].tolist()
-        tte   = np.array([tte_map.get(p, np.nan) for p in pids], dtype=float)
-        event = np.array([evt_map.get(p, 0)       for p in pids], dtype=float)
-        risk  = result_df["risk_score"].values
-        mask  = np.isfinite(tte) & (tte > 0)
-        if mask.sum() < 5:
-            return np.nan
-        return float(concordance_index(tte[mask], -risk[mask], event[mask]))
-    except Exception:
-        return np.nan
-
-
-def _show_c_matrix_block(c_matrix: np.ndarray) -> pd.DataFrame:
-    df_c = pd.DataFrame(
-        c_matrix,
-        index=[f"p={int(p)}d" for p in P_TIMES],
-        columns=[f"e={int(e)}d" for e in E_TIMES],
-    )
-    st.dataframe(
-        df_c.style.format("{:.4f}").background_gradient(cmap="RdYlGn", vmin=0.3, vmax=0.8),
-        width="stretch",
-    )
-    st.metric("Mean C-Index", f"{float(np.nanmean(c_matrix)):.4f}")
-
-    _save_c_matrix(c_matrix, "stklm0_train")
-    st.download_button(
-        "Download C-index table (CSV)",
-        df_c.to_csv().encode(),
-        file_name="c_index_stklm0.csv",
-        mime="text/csv",
-    )
-    return df_c
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -364,9 +217,9 @@ def _show_c_matrix_block(c_matrix: np.ndarray) -> pd.DataFrame:
 uploaded = st.file_uploader(
     "Upload patient CSV (STKLM0 schema)",
     type=["csv"],
-    help="One row per patient. Required: id, exp_date, d_diaage, d_spsa, isup_gealson, "
-         "t_clean, isup_RP, pT, pR, pRlenght, pN, PSA1…PSA135, psadate1…psadate135. "
-         "Training also needs crmort and t_end.",
+    help="One row per patient. Required columns: id, exp_date, d_diaage, d_spsa, "
+         "isup_gealson, t_clean, isup_RP, pT, pR, pRlenght, pN, "
+         "PSA1…PSA135, psadate1…psadate135.",
 )
 
 if uploaded is None:
@@ -403,8 +256,6 @@ with st.expander("Preview data"):
     st.dataframe(df_raw.head(10), width="stretch")
 
 # ── Outcome selection ────────────────────────────────────────────────────────
-has_event = all(c in df_raw.columns for c in ["crmort", "t_end"])
-
 sel_col, run_col = st.columns([3, 1])
 with sel_col:
     selected_outcomes = st.multiselect(
@@ -412,12 +263,6 @@ with sel_col:
         options=["BCR", "CSM"],
         default=["BCR", "CSM"],
         help="BCR = Biochemical Recurrence · CSM = Cancer-Specific Mortality",
-    )
-    run_training = st.checkbox(
-        "Train new model on uploaded data (CSM, requires crmort + t_end)",
-        value=has_event,
-        disabled=not has_event,
-        help="Disabled when the uploaded file is missing crmort or t_end columns.",
     )
 with run_col:
     st.write("")  # vertical alignment spacer
@@ -427,110 +272,27 @@ with run_col:
 if not do_run:
     st.stop()
 
-if not selected_outcomes and not run_training:
-    st.warning("Select at least one outcome or enable training.")
+if not selected_outcomes:
+    st.warning("Select at least one outcome.")
     st.stop()
 
 # Accumulated for the download-all bundle
 _bundle: dict[str, bytes] = {}   # {filename_in_zip: bytes}
 
 # ── Milan Inference ─────────────────────────────────────────────────────────
-milan_results: dict = {}
-if selected_outcomes:
-    st.markdown("---")
-    st.subheader("Milan Model Inference")
-    outcome_cols = st.columns(len(selected_outcomes))
-    for (outcome_key, col) in zip([o.lower() for o in selected_outcomes], outcome_cols):
-        with col:
-            st.markdown(f"**{outcome_key.upper()}**")
-            with st.spinner(f"Running Milan {outcome_key.upper()} …"):
-                result, err = _milan_inference(df_raw, outcome_key)
-            if err:
-                st.error(err)
-            else:
-                milan_results[outcome_key] = result
-                _show_inference_block(result, outcome_key)
-                _bundle[f"predictions_{outcome_key}.csv"] = result.to_csv(index=False).encode()
-
-# ── Train & Evaluate ─────────────────────────────────────────────────────────
 st.markdown("---")
-st.subheader("Train & Evaluate New Model (CSM)")
-
-if not run_training:
-    st.info("Training skipped — uncheck to re-enable above.")
-elif not has_event:
-    st.warning("Columns `crmort` and/or `t_end` not found — cannot train.")
-else:
-    log_box = st.empty()
-    log_lines: list[str] = []
-
-    def _log(msg: str):
-        log_lines.append(msg)
-        log_box.info("  \n".join(log_lines))
-
-    with st.spinner("Training in progress …"):
-        try:
-            model, c_matrix = _train_and_evaluate(df_raw, log_fn=_log)
-        except Exception as exc:
-            log_box.empty()
-            st.error(f"Training failed: {exc}")
-            st.exception(exc)
-            st.stop()
-
-    log_box.empty()
-    st.success("Training complete.")
-    st.markdown("#### Time-dependent C-index (new STKLM0 model)")
-    df_c = _show_c_matrix_block(c_matrix)
-    _bundle["c_index_stklm0.csv"] = df_c.to_csv().encode()
-
-    # ── Model comparison table ───────────────────────────────────────────────
-    has_event = all(c in df_raw.columns for c in ["crmort", "t_end"])
-    if has_event and milan_results:
-        st.markdown("#### Model Comparison (Harrell's C-index on uploaded data)")
-        rows = []
-        for ok, res in milan_results.items():
-            ci = _compute_cindex_simple(df_raw, res)
-            rows.append({
-                "Model":   f"Milan {ok.upper()} (pre-trained)",
-                "Outcome": ok.upper(),
-                "C-index": round(ci, 4) if not np.isnan(ci) else "—",
-            })
-        rows.append({
-            "Model":   "BertPCa STKLM0 (just trained)",
-            "Outcome": "CSM",
-            "C-index": round(float(np.nanmean(c_matrix)), 4),
-        })
-        df_cmp = pd.DataFrame(rows).set_index("Model")
-        st.dataframe(
-            df_cmp.style.highlight_max(subset=["C-index"], color="#d4edda"),
-            width="stretch",
-        )
-        st.caption(
-            "Milan C-index uses simple Harrell's concordance on the full uploaded cohort. "
-            "New model C-index is the mean time-dependent (IPCW) C-index on the held-out test split."
-        )
-        cmp_bytes = df_cmp.reset_index().to_csv(index=False).encode()
-        st.download_button(
-            "Download comparison table (CSV)",
-            cmp_bytes,
-            file_name="model_comparison.csv",
-            mime="text/csv",
-        )
-        _bundle["model_comparison.csv"] = cmp_bytes
-
-    model_path = os.path.join(_MODELS_DIR, "app_trained_stklm0_csm.keras")
-    os.makedirs(_MODELS_DIR, exist_ok=True)
-    model.save(model_path)
-
-    with open(model_path, "rb") as fh:
-        model_bytes = fh.read()
-    st.download_button(
-        "Download trained model (.keras)",
-        model_bytes,
-        file_name="bertpca_stklm0_csm.keras",
-        mime="application/octet-stream",
-    )
-    _bundle["bertpca_stklm0_csm.keras"] = model_bytes
+st.subheader("Milan Model Inference")
+outcome_cols = st.columns(len(selected_outcomes))
+for (outcome_key, col) in zip([o.lower() for o in selected_outcomes], outcome_cols):
+    with col:
+        st.markdown(f"**{outcome_key.upper()}**")
+        with st.spinner(f"Running Milan {outcome_key.upper()} …"):
+            result, err = _milan_inference(df_raw, outcome_key)
+        if err:
+            st.error(err)
+        else:
+            _show_inference_block(result, outcome_key)
+            _bundle[f"predictions_{outcome_key}.csv"] = result.to_csv(index=False).encode()
 
 # ── Download all results ──────────────────────────────────────────────────────
 if _bundle:
