@@ -34,9 +34,9 @@ T_MAX           = 3650.0   # 10-year cap (adjust once actual follow-up range is 
 RANDOM_STATE    = 42
 N_PSA           = 135      # PSA1...PSA135
 
-# Encoding maps — must match the STKLM0 codebook
+# Encoding maps — must match the STKLM0 codebook (numeric codes only)
 T_CLEAN_MAP = {0: 0, 1: 1, 2: 2, 3: 3, 9: np.nan}
-PT_MAP      = {0: np.nan, 2: 0, 5: 1, 3: 1, 6: 2, 4: 3, 9: np.nan}
+PT_MAP      = {0: np.nan, 2: 0, 3: 1, 4: 3, 5: 1, 6: 2, 9: np.nan}
 PR_MAP      = {1: 0, 2: 1, 3: np.nan, 98: np.nan}
 PN_MAP      = {0: 0, 1: 1, 9: np.nan, 98: np.nan}
 
@@ -44,6 +44,166 @@ STATIC_COLS = [
     "d_diaage", "d_spsa", "isup_gealson", "t_clean_ord",
     "isup_RP",  "pT_ord", "pR_bin",       "pRlenght",   "pN_bin",
 ]
+
+# ---------------------------------------------------------------------------
+# Robust scalar parsers — handle numeric codes AND common string formats
+# ---------------------------------------------------------------------------
+
+_UNKNOWN_STRINGS = {"", "nan", "none", "na", "n/a", "unknown", "unk", "missing", ".", "-"}
+
+
+def _to_float(val) -> float:
+    """Convert a scalar to float, handling European comma decimals and </>  prefixes."""
+    if val is None or (isinstance(val, float) and np.isnan(val)):
+        return np.nan
+    s = str(val).strip()
+    if s.lower() in _UNKNOWN_STRINGS:
+        return np.nan
+    # Strip leading comparison operators: "<0.01" → "0.01", ">200" → "200"
+    s = s.lstrip("<>≤≥~").strip()
+    # European decimal comma: "3,5" → "3.5"  (only when no other comma present)
+    if "," in s and "." not in s:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return np.nan
+
+
+def _parse_pt_stage(val) -> float:
+    """
+    Parse pathological T-stage to ordinal {0=pT2, 1=pT3a, 2=pT3b/c, 3=pT4}.
+
+    Accepts:
+      - Numeric STKLM0 codes: 0, 2, 3, 4, 5, 6, 9
+      - Strings: 'pT2', 'pT2a', 'pT2b', 'pT2c', 'T2', 'pT3', 'pT3a', 'pT3b',
+                 'pT3c', 'T3a', 'T3b', 'pT4', 'T4', '2', '3a', '3b' …
+    """
+    # Try numeric codebook first
+    num = _to_float(val)
+    if not np.isnan(num):
+        code = int(num)
+        if code in PT_MAP:
+            return PT_MAP[code]
+        # Codes not in the map are unexpected → NaN
+        return np.nan
+    # String parsing
+    s = str(val).strip().upper().replace(" ", "").replace("-", "").replace("_", "")
+    if s in _UNKNOWN_STRINGS or s in {"0", "9", "98"}:
+        return np.nan
+    # Strip leading "PT" or "T"
+    for prefix in ("PT", "T"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    # Match stage
+    if s.startswith("2"):          # pT2, pT2a, pT2b, pT2c → 0
+        return 0.0
+    if s in ("3", "3A", "3C"):     # pT3 / pT3a / pT3c (no consensus → treat as 3a) → 1
+        return 1.0
+    if s in ("3B",):               # pT3b → 2
+        return 2.0
+    if s.startswith("4"):          # pT4 → 3
+        return 3.0
+    return np.nan
+
+
+def _parse_t_clean(val) -> float:
+    """
+    Parse clinical T-stage to ordinal {0=T1, 1=T2a, 2=T2b/c, 3=T3+}.
+
+    Accepts numeric codes {0,1,2,3,9} or strings 'T1', 'T1c', 'T2a', 'T2b',
+    'T2c', 'T2', 'T3', 'T3a', 'T3b', '1', '2a', '3' …
+    """
+    num = _to_float(val)
+    if not np.isnan(num):
+        code = int(num)
+        return T_CLEAN_MAP.get(code, np.nan)
+    s = str(val).strip().upper().replace(" ", "").replace("-", "")
+    if s in _UNKNOWN_STRINGS or s == "9":
+        return np.nan
+    for prefix in ("CT", "T"):
+        if s.startswith(prefix):
+            s = s[len(prefix):]
+            break
+    if s.startswith("1"):   return 0.0   # T1, T1a, T1b, T1c
+    if s in ("2A",):        return 1.0
+    if s in ("2B", "2C", "2"):  return 2.0
+    if s.startswith("3") or s.startswith("4"):  return 3.0
+    return np.nan
+
+
+def _parse_margin(val) -> float:
+    """
+    Parse surgical margin status to binary {0=negative, 1=positive}.
+
+    Accepts numeric codes {1,2,3,98} or strings 'R0', 'R1', 'neg', 'pos',
+    'negative', 'positive', 'free', '0', '1' …
+    """
+    num = _to_float(val)
+    if not np.isnan(num):
+        code = int(num)
+        return PR_MAP.get(code, np.nan)
+    s = str(val).strip().upper().replace(" ", "")
+    if s in _UNKNOWN_STRINGS or s in {"3", "98"}:
+        return np.nan
+    if s in ("R0", "0", "NEG", "NEGATIVE", "FREE", "CLEAR", "N"):
+        return 0.0
+    if s in ("R1", "R2", "1", "2", "POS", "POSITIVE", "INVOLVED", "Y"):
+        return 1.0
+    return np.nan
+
+
+def _parse_node(val) -> float:
+    """
+    Parse lymph node status to binary {0=N0, 1=N1}.
+
+    Accepts numeric codes {0,1,9,98} or strings 'N0', 'N1', 'neg', 'pos' …
+    """
+    num = _to_float(val)
+    if not np.isnan(num):
+        code = int(num)
+        return PN_MAP.get(code, np.nan)
+    s = str(val).strip().upper().replace(" ", "")
+    if s in _UNKNOWN_STRINGS or s in {"9", "98"}:
+        return np.nan
+    if s in ("N0", "0", "NEG", "NEGATIVE", "N"):
+        return 0.0
+    if s in ("N1", "N2", "N3", "1", "2", "3", "POS", "POSITIVE", "Y"):
+        return 1.0
+    return np.nan
+
+
+def _parse_isup(val) -> float:
+    """Parse ISUP grade to int {1-5}; handles 'Grade 3', '3+4', '7' (sum → grade)."""
+    num = _to_float(val)
+    if not np.isnan(num):
+        v = int(num)
+        # Gleason sum (6-10) → ISUP grade
+        if 6 <= v <= 10:
+            return float({6: 1, 7: 2, 8: 3, 9: 4, 10: 5}.get(v, np.nan))
+        if 1 <= v <= 5:
+            return float(v)
+        return np.nan
+    s = str(val).strip().upper().replace(" ", "")
+    # "3+4", "4+3" → sum → ISUP
+    if "+" in s:
+        parts = s.replace("GRADE", "").split("+")
+        try:
+            total = sum(int(p) for p in parts)
+            return _parse_isup(total)
+        except ValueError:
+            pass
+    # "GRADE3" / "GG3"
+    for prefix in ("GRADE", "GG", "G"):
+        if s.startswith(prefix):
+            return _parse_isup(s[len(prefix):])
+    return np.nan
+
+
+def _apply_parser(series: pd.Series, fn) -> pd.Series:
+    """Apply a scalar parser element-wise, returning a float Series."""
+    return series.apply(fn).astype(float)
 
 
 # ---------------------------------------------------------------------------
@@ -55,32 +215,33 @@ def encode_stklm0_features(df: pd.DataFrame) -> pd.DataFrame:
     Apply STKLM0 codebook encodings and produce a clean static feature DataFrame.
     Input df must have one row per patient, indexed by patient ID.
 
-    Codebook-mapped unknowns (e.g. pT=9, pN=9/98, pR=3/98) become NaN and are
-    later filled by split_and_impute (training) or fallback batch-median imputation
-    (inference).  Outlier clips applied before imputation:
-      - d_diaage  : [20, 100] years
-      - d_spsa    : [0, 2000] ng/mL
-      - isup_*    : [1, 5]
-      - pRlenght  : [0, 100] mm
+    Handles both numeric codebook values AND common string formats
+    (e.g. 'pT3a', 'T2b', 'R0', 'N1', 'Grade 3', '<0.01', '3,5').
+
+    Codebook-mapped unknowns become NaN and are later filled by split_and_impute
+    (training) or fallback batch-median imputation (inference).
     """
     out = pd.DataFrame(index=df.index)
 
-    # Continuous features — convert then clip outliers
-    age = pd.to_numeric(df["d_diaage"], errors="coerce")
-    out["d_diaage"] = age.where(age > 0).clip(20, 100)  # 0 → NaN → imputed with median
-    out["d_spsa"]       = pd.to_numeric(df["d_spsa"],       errors="coerce").clip(0, 2000)
-    out["isup_gealson"] = pd.to_numeric(df["isup_gealson"], errors="coerce").clip(1, 5)
-    out["isup_RP"]      = pd.to_numeric(df["isup_RP"],      errors="coerce").clip(1, 5)
+    # --- Continuous features ------------------------------------------------
+    age = _apply_parser(df["d_diaage"], _to_float)
+    out["d_diaage"] = age.where(age > 0).clip(20, 100)   # 0 → NaN → imputed
 
-    # Ordinal / binary encodings via codebook maps (unknowns → NaN)
-    out["t_clean_ord"] = pd.to_numeric(df["t_clean"], errors="coerce").map(T_CLEAN_MAP)
-    out["pT_ord"]      = pd.to_numeric(df["pT"],      errors="coerce").map(PT_MAP)
-    out["pR_bin"]      = pd.to_numeric(df["pR"],      errors="coerce").map(PR_MAP)
-    out["pN_bin"]      = pd.to_numeric(df["pN"],      errors="coerce").map(PN_MAP)
+    out["d_spsa"]       = _apply_parser(df["d_spsa"],       _to_float).clip(0, 2000)
+    out["isup_gealson"] = _apply_parser(df["isup_gealson"], _parse_isup).clip(1, 5)
+    out["isup_RP"]      = _apply_parser(df["isup_RP"],      _parse_isup).clip(1, 5)
 
-    # Margin length: PSM-negative patients are recorded as missing here → set to 0
-    pRlenght = pd.to_numeric(df.get("pRlenght", pd.Series(np.nan, index=df.index)),
-                              errors="coerce").clip(0, 100)
+    # --- Staged / categorical features --------------------------------------
+    out["t_clean_ord"] = _apply_parser(df["t_clean"], _parse_t_clean)
+    out["pT_ord"]      = _apply_parser(df["pT"],      _parse_pt_stage)
+    out["pR_bin"]      = _apply_parser(df["pR"],      _parse_margin)
+    out["pN_bin"]      = _apply_parser(df["pN"],      _parse_node)
+
+    # --- Margin length ------------------------------------------------------
+    # If pR is available in the source column, try to use it for pRlenght logic
+    pRlenght_raw = df.get("pRlenght", pd.Series(np.nan, index=df.index))
+    pRlenght = _apply_parser(pRlenght_raw, _to_float).clip(0, 100)
+    # Negative / unknown margins → margin length = 0 (not applicable)
     out["pRlenght"] = np.where(out["pR_bin"] == 0, 0.0, pRlenght)
 
     return out
@@ -90,11 +251,33 @@ def encode_stklm0_features(df: pd.DataFrame) -> pd.DataFrame:
 # PSA wide → long conversion
 # ---------------------------------------------------------------------------
 
+def _parse_date_flexible(series: pd.Series) -> pd.Series:
+    """
+    Parse dates tolerating multiple formats:
+    YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, DD.MM.YYYY, DD-MM-YYYY.
+    Returns a datetime Series (NaT on failure).
+    """
+    # Try ISO first (most common, unambiguous)
+    parsed = pd.to_datetime(series, errors="coerce", format="%Y-%m-%d")
+    failed = parsed.isna() & series.notna() & (series.astype(str).str.strip() != "")
+    if failed.any():
+        # dayfirst=True covers DD/MM/YYYY, DD.MM.YYYY, DD-MM-YYYY
+        fallback = pd.to_datetime(series[failed], errors="coerce", dayfirst=True)
+        parsed = parsed.copy()
+        parsed[failed] = fallback
+    return parsed
+
+
 def build_psa_long_stklm0(df: pd.DataFrame, t_max: float = T_MAX, n_psa: int = N_PSA) -> pd.DataFrame:
     """
     Convert PSA1...PSA{n_psa} + psadate1...psadate{n_psa} to long format.
     Surgery reference date: exp_date.
     Caps at t_max, enforces strictly monotone timestamps.
+
+    Robust to:
+    - String PSA values: '<0.01', '3,5' (European decimal), 'undetectable'
+    - Mixed date formats: YYYY-MM-DD, DD/MM/YYYY, DD.MM.YYYY
+    - Mismatched PSA / date column counts
     """
     # Only keep indices where BOTH PSA{i} and psadate{i} exist — prevents shape mismatch
     valid_idx = [i for i in range(1, n_psa + 1)
@@ -102,14 +285,18 @@ def build_psa_long_stklm0(df: pd.DataFrame, t_max: float = T_MAX, n_psa: int = N
     psa_cols  = [f"PSA{i}"     for i in valid_idx]
     date_cols = [f"psadate{i}" for i in valid_idx]
 
-    dos      = pd.to_datetime(df["exp_date"], errors="coerce")
-    df_dates = df[date_cols].apply(lambda col: pd.to_datetime(col, errors="coerce"))
+    dos      = _parse_date_flexible(df["exp_date"])
+    df_dates = df[date_cols].apply(_parse_date_flexible)
     df_days  = df_dates.subtract(dos, axis=0).apply(
         lambda col: col.dt.days if hasattr(col, "dt") else col.map(
             lambda x: x.days if pd.notna(x) else np.nan
         )
     ).astype("float64")   # nullable Int64 → plain float64 so np.isnan works
-    df_psa = df[psa_cols].copy().apply(pd.to_numeric, errors="coerce")
+
+    # Parse PSA values robustly (handles '<0.01', '3,5', 'undetectable', etc.)
+    df_psa = df[psa_cols].copy().apply(
+        lambda col: col.apply(_to_float)
+    ).astype("float64")
 
     neg_mask = df_days < 0
     df_days[neg_mask] = np.nan

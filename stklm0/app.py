@@ -177,10 +177,11 @@ def _prepare_in_memory(df_raw: pd.DataFrame, t_max: float):
         encode_stklm0_features, build_psa_long_stklm0,
         assemble_long_format, split_and_impute, STATIC_COLS,
     )
+    from prepare_stklm0 import _parse_date_flexible
     df = df_raw.copy()
     df["label"] = (pd.to_numeric(df.get("crmort", 0), errors="coerce") == 1).astype(int)
-    exp_date = pd.to_datetime(df["exp_date"], errors="coerce")
-    t_end    = pd.to_datetime(df.get("t_end", pd.NaT), errors="coerce")
+    exp_date = _parse_date_flexible(df["exp_date"])
+    t_end    = _parse_date_flexible(df.get("t_end", pd.Series(pd.NaT, index=df.index)))
     df["tte"] = (t_end - exp_date).dt.days.clip(lower=1, upper=t_max)
 
     df_static = encode_stklm0_features(df)
