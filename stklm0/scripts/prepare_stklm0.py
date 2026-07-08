@@ -84,8 +84,11 @@ def build_psa_long_stklm0(df: pd.DataFrame, t_max: float = T_MAX, n_psa: int = N
     Surgery reference date: exp_date.
     Caps at t_max, enforces strictly monotone timestamps.
     """
-    psa_cols  = [f"PSA{i}"     for i in range(1, n_psa + 1) if f"PSA{i}"     in df.columns]
-    date_cols = [f"psadate{i}" for i in range(1, n_psa + 1) if f"psadate{i}" in df.columns]
+    # Only keep indices where BOTH PSA{i} and psadate{i} exist — prevents shape mismatch
+    valid_idx = [i for i in range(1, n_psa + 1)
+                 if f"PSA{i}" in df.columns and f"psadate{i}" in df.columns]
+    psa_cols  = [f"PSA{i}"     for i in valid_idx]
+    date_cols = [f"psadate{i}" for i in valid_idx]
 
     dos      = pd.to_datetime(df["exp_date"], errors="coerce")
     df_dates = df[date_cols].apply(lambda col: pd.to_datetime(col, errors="coerce"))
