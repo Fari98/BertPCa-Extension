@@ -457,12 +457,12 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
             row = {
                 "Model": f"Milan {ok.upper()} (pre-trained)",
                 "Type": "Weibull",
-                "Mean C-index": round(mean_ci, 4) if not np.isnan(mean_ci) else "—",
+                "Mean C-index": round(mean_ci, 4) if not np.isnan(mean_ci) else np.nan,
                 "Note": "Harrell C on full cohort",
             }
             for e in E_TIMES:
                 v = ci_map.get(int(e), np.nan)
-                row[f"e={int(e)}d (mean p)"] = round(v, 4) if not np.isnan(v) else "—"
+                row[f"e={int(e)}d (mean p)"] = round(v, 4) if not np.isnan(v) else np.nan
             rows.append(row)
 
     # Baselines (CoxPH, RSF, DDH)
@@ -471,9 +471,9 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
             rows.append({
                 "Model": name,
                 "Type": "Baseline",
-                **{f"e={int(e)}d (mean p)": "—" for e in E_TIMES},
-                "Mean C-index": "failed",
-                "Note": "",
+                **{f"e={int(e)}d (mean p)": np.nan for e in E_TIMES},
+                "Mean C-index": np.nan,
+                "Note": "failed",
             })
         else:
             row = {
@@ -500,15 +500,11 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
     df_cmp = pd.DataFrame(rows).set_index("Model")
     numeric_cols = [c for c in df_cmp.columns if c.startswith("e=") or c == "Mean C-index"]
 
-    def _try_float(v):
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return np.nan
+    # Coerce all numeric columns to float (eliminates mixed str/float object columns
+    # that break pyarrow serialization in st.dataframe)
+    for col in numeric_cols:
+        df_cmp[col] = pd.to_numeric(df_cmp[col], errors="coerce")
 
-    # applymap was renamed to map in pandas 2.1
-    _map_fn = getattr(df_cmp[numeric_cols], "map", None) or df_cmp[numeric_cols].applymap
-    df_numeric = _map_fn(_try_float)
     st.dataframe(df_cmp, width="stretch")
     st.caption(
         "Milan: Harrell's concordance on the full uploaded cohort. "
