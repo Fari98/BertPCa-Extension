@@ -314,12 +314,14 @@ def load_and_preprocess_data(
         train_max = train_s.loc[:, features_to_scale].max()
         train_min = train_s.loc[:, features_to_scale].min()
         
-        # Apply scaling
+        # Apply scaling column-by-column to avoid "Columns must be the same length as key"
+        # error that fires when assigning a DataFrame result to a multi-column loc slice.
+        denom = (train_max - train_min).replace(0, 1.0)
         for df in [train_s, val_s, test_s]:
-            df.loc[:, features_to_scale] = (
-                (df.loc[:, features_to_scale] - train_min) / (train_max - train_min)
-            )
-            df.loc[:, ['tte', 'times']] = df.loc[:, ['tte', 'times']] / t_max
+            for col in features_to_scale:
+                df[col] = (df[col] - train_min[col]) / denom[col]
+            df['tte']   = df['tte']   / t_max
+            df['times'] = df['times'] / t_max
     
     # Create structured arrays for survival labels
     dt = np.dtype([('Status', '?'), ('Survival_in_days', '<f8')])

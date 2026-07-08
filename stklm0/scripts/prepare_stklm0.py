@@ -217,7 +217,10 @@ def split_and_impute(df_long: pd.DataFrame, static_cols: list,
 
     for split in [train, val, test]:
         imputed = imp.transform(split[static_cols])
-        split[static_cols] = imputed
+        # Assign column-by-column to avoid pandas "Columns must be the same length as key"
+        # error that fires when assigning a 2-D array or DataFrame to a multi-column loc slice.
+        for i, col in enumerate(static_cols):
+            split[col] = imputed[:, i]
 
     return train, val, test, imp
 
