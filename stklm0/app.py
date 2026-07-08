@@ -547,7 +547,7 @@ with sel_col:
     selected_outcomes = st.multiselect(
         "Outcomes to predict (Milan models)",
         options=["BCR", "CSM"],
-        default=["BCR", "CSM"],
+        default=["CSM"],
         help="BCR = Biochemical Recurrence · CSM = Cancer-Specific Mortality",
     )
     run_training = st.checkbox(
