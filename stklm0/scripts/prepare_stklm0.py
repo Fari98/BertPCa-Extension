@@ -54,21 +54,32 @@ def encode_stklm0_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Apply STKLM0 codebook encodings and produce a clean static feature DataFrame.
     Input df must have one row per patient, indexed by patient ID.
+
+    Codebook-mapped unknowns (e.g. pT=9, pN=9/98, pR=3/98) become NaN and are
+    later filled by split_and_impute (training) or fallback batch-median imputation
+    (inference).  Outlier clips applied before imputation:
+      - d_diaage  : [20, 100] years
+      - d_spsa    : [0, 2000] ng/mL
+      - isup_*    : [1, 5]
+      - pRlenght  : [0, 100] mm
     """
     out = pd.DataFrame(index=df.index)
-    out["d_diaage"]    = pd.to_numeric(df["d_diaage"], errors="coerce")
-    out["d_spsa"]      = pd.to_numeric(df["d_spsa"],   errors="coerce")
-    out["isup_gealson"]= pd.to_numeric(df["isup_gealson"], errors="coerce")
-    out["isup_RP"]     = pd.to_numeric(df["isup_RP"],  errors="coerce")
 
+    # Continuous features — convert then clip outliers
+    out["d_diaage"]     = pd.to_numeric(df["d_diaage"],     errors="coerce").clip(20, 100)
+    out["d_spsa"]       = pd.to_numeric(df["d_spsa"],       errors="coerce").clip(0, 2000)
+    out["isup_gealson"] = pd.to_numeric(df["isup_gealson"], errors="coerce").clip(1, 5)
+    out["isup_RP"]      = pd.to_numeric(df["isup_RP"],      errors="coerce").clip(1, 5)
+
+    # Ordinal / binary encodings via codebook maps (unknowns → NaN)
     out["t_clean_ord"] = pd.to_numeric(df["t_clean"], errors="coerce").map(T_CLEAN_MAP)
     out["pT_ord"]      = pd.to_numeric(df["pT"],      errors="coerce").map(PT_MAP)
     out["pR_bin"]      = pd.to_numeric(df["pR"],      errors="coerce").map(PR_MAP)
     out["pN_bin"]      = pd.to_numeric(df["pN"],      errors="coerce").map(PN_MAP)
 
-    # Margin length: 0 when PSM negative, NaN-preserving otherwise
+    # Margin length: PSM-negative patients are recorded as missing here → set to 0
     pRlenght = pd.to_numeric(df.get("pRlenght", pd.Series(np.nan, index=df.index)),
-                              errors="coerce")
+                              errors="coerce").clip(0, 100)
     out["pRlenght"] = np.where(out["pR_bin"] == 0, 0.0, pRlenght)
 
     return out
@@ -144,8 +155,9 @@ def assemble_long_format(df_static: pd.DataFrame,
         psa_long["id"].unique()
     )
     df_s = df_static.loc[valid_ids, static_cols].copy()
-    df_s["label"] = df_outcome.loc[valid_ids, "label"]
-    df_s["tte"]   = df_outcome.loc[valid_ids, "tte"]
+    df_s = df_s[~df_s.index.duplicated(keep="first")]  # guard against duplicate IDs
+    df_s["label"] = df_outcome.loc[df_s.index, "label"]
+    df_s["tte"]   = df_outcome.loc[df_s.index, "tte"]
     df_s = df_s[df_s["tte"] > 0]
 
     psa_sub = psa_long[psa_long["id"].isin(df_s.index)].copy().set_index("id")
