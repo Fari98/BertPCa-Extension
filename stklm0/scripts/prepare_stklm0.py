@@ -66,7 +66,8 @@ def encode_stklm0_features(df: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(index=df.index)
 
     # Continuous features — convert then clip outliers
-    out["d_diaage"]     = pd.to_numeric(df["d_diaage"],     errors="coerce").clip(20, 100)
+    age = pd.to_numeric(df["d_diaage"], errors="coerce")
+    out["d_diaage"] = age.where(age > 0).clip(20, 100)  # 0 → NaN → imputed with median
     out["d_spsa"]       = pd.to_numeric(df["d_spsa"],       errors="coerce").clip(0, 2000)
     out["isup_gealson"] = pd.to_numeric(df["isup_gealson"], errors="coerce").clip(1, 5)
     out["isup_RP"]      = pd.to_numeric(df["isup_RP"],      errors="coerce").clip(1, 5)
