@@ -479,7 +479,9 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
         except (TypeError, ValueError):
             return np.nan
 
-    df_numeric = df_cmp[numeric_cols].applymap(_try_float)
+    # applymap was renamed to map in pandas 2.1
+    _map_fn = getattr(df_cmp[numeric_cols], "map", None) or df_cmp[numeric_cols].applymap
+    df_numeric = _map_fn(_try_float)
     st.dataframe(df_cmp, width="stretch")
     st.caption(
         "Milan: Harrell's concordance on the full uploaded cohort. "
