@@ -399,11 +399,25 @@ def split_and_impute(df_long: pd.DataFrame, static_cols: list,
     test  = df_long.loc[test_ids].copy()
 
     train_first = train.groupby(level=0)[static_cols].first()
-    imp = SimpleImputer(strategy="median")
+    # keep_empty_features=True prevents sklearn from dropping all-NaN columns during
+    # transform (added in sklearn 1.1).  Older sklearn silently drops them, which would
+    # return (n, 8) when static_cols has 9 entries, causing "index 8 out of bounds".
+    try:
+        imp = SimpleImputer(strategy="median", keep_empty_features=True)
+    except TypeError:
+        imp = SimpleImputer(strategy="median")
     imp.fit(train_first)
 
+    # Which static_cols had a computable median (non-NaN statistic)?
+    valid_stat_mask = ~np.isnan(imp.statistics_)
+
     for split in [train, val, test]:
-        imputed = imp.transform(split[static_cols])
+        imputed = imp.transform(split[static_cols])  # may be (n, < len(static_cols))
+        # Guard: if sklearn dropped all-NaN columns, expand back to full width with 0.
+        if imputed.shape[1] < len(static_cols):
+            full = np.zeros((imputed.shape[0], len(static_cols)), dtype=float)
+            full[:, valid_stat_mask] = imputed
+            imputed = full
         # Assign column-by-column to avoid pandas "Columns must be the same length as key"
         # error that fires when assigning a 2-D array or DataFrame to a multi-column loc slice.
         for i, col in enumerate(static_cols):
