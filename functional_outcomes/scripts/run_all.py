@@ -65,7 +65,7 @@ def _baseline_csv() -> str:
 
 
 def _pipeline_cindex_csv() -> str:
-    return os.path.join(_OUT_DIR, "results", "ef", "pipeline", "c_index_table.csv")
+    return os.path.join(_OUT_DIR, "results", "ef_uri", "pipeline", "c_index_table.csv")
 
 
 def _pipeline_model() -> str:
@@ -77,14 +77,14 @@ def _pipeline_model() -> str:
 # ---------------------------------------------------------------------------
 
 def step_prepare(force: bool) -> None:
-    ef_csv = os.path.join(_DATA_DIR, "ef_train.csv")
+    ef_csv = os.path.join(_DATA_DIR, "uri_ef_train.csv")
     if not force and os.path.exists(ef_csv):
         print("\n[SKIP] Dataset preparation — CSVs already exist "
               "(use --force-prepare to regenerate)")
         return
     _run(
-        "Step 1 — Prepare EF dataset from Milan RData (IIEF>=17, full cohort)",
-        [os.path.join(_SCRIPTS, "prepare_dataset.py")],
+        "Step 1 — Prepare EF dataset from URI longitudinal IIEF data",
+        [os.path.join(_SCRIPTS, "prepare_dataset_uri.py")],
     )
 
 
@@ -237,14 +237,14 @@ def step_compare() -> None:
 
 _BUNDLE_FILES = [
     # comparison tables
-    ("outputs/full_results_ef.csv",                             "full_results_ef.csv"),
-    ("outputs/baseline_results_ef.csv",                         "baseline_results_ef.csv"),
+    ("outputs/full_results_ef.csv",                                 "full_results_ef.csv"),
+    ("outputs/baseline_results_ef.csv",                             "baseline_results_ef.csv"),
     # pipeline internals
-    ("outputs/boruta_ef_features.json",                         "boruta_ef_features.json"),
-    ("outputs/hpt_best_ef.json",                                "hpt_best_ef.json"),
+    ("outputs/boruta_ef_features.json",                             "boruta_ef_features.json"),
+    ("outputs/hpt_best_ef.json",                                    "hpt_best_ef.json"),
     # BertPCa evaluation
-    ("outputs/results/ef/pipeline/c_index_table.csv",           "bertpca_c_index_table.csv"),
-    ("outputs/results/ef/training_log.txt",                     "bertpca_training_log.txt"),
+    ("outputs/results/ef_uri/pipeline/c_index_table.csv",           "bertpca_c_index_table.csv"),
+    ("outputs/results/ef_uri/training_log.txt",                     "bertpca_training_log.txt"),
 ]
 
 

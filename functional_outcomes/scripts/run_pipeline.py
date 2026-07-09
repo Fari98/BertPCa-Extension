@@ -41,8 +41,8 @@ from train_functional import train_model
 
 _CONFIG_DIR = os.path.join(_REPO_ROOT, "functional_outcomes", "config")
 _CONFIG_MAP = {
-    "ef": os.path.join(_CONFIG_DIR, "config_ef.yaml"),
-    "uc": os.path.join(_CONFIG_DIR, "config_uc.yaml"),
+    "ef": os.path.join(_CONFIG_DIR, "config_ef_uri.yaml"),
+    "uc": os.path.join(_CONFIG_DIR, "config_uc_uri.yaml"),
 }
 _DATA_DIR   = os.path.join(_REPO_ROOT, "functional_outcomes", "data")
 _OUTPUT_DIR = os.path.join(_REPO_ROOT, "functional_outcomes", "outputs")
@@ -99,18 +99,18 @@ def _make_config(outcome: str, static_features: list):
 def stage_1_prepare(force: bool) -> None:
     expected = [
         os.path.join(_DATA_DIR, f)
-        for f in ("ef_train.csv", "ef_val.csv", "ef_test.csv",
-                  "uc_train.csv", "uc_val.csv", "uc_test.csv")
+        for f in ("uri_ef_train.csv", "uri_ef_val.csv", "uri_ef_test.csv",
+                  "uri_uc_train.csv", "uri_uc_val.csv", "uri_uc_test.csv")
     ]
     if not force and all(os.path.exists(p) for p in expected):
         print("[Stage 1] CSVs already exist — skipping (use --force-prepare to regenerate).")
         return
 
-    print("[Stage 1] Running prepare_dataset.py ...")
-    script = os.path.join(_REPO_ROOT, "functional_outcomes", "scripts", "prepare_dataset.py")
+    print("[Stage 1] Running prepare_dataset_uri.py ...")
+    script = os.path.join(_REPO_ROOT, "functional_outcomes", "scripts", "prepare_dataset_uri.py")
     result = subprocess.run([sys.executable, script], cwd=_REPO_ROOT)
     if result.returncode != 0:
-        raise RuntimeError(f"prepare_dataset.py exited with code {result.returncode}")
+        raise RuntimeError(f"prepare_dataset_uri.py exited with code {result.returncode}")
     print("[Stage 1] Done.")
 
 
@@ -180,7 +180,7 @@ def stage_2_boruta(outcome: str, random_state: int, max_iter: int,
         print(f"  Selected ({len(selected)}): {selected}")
         return selected
 
-    train_csv  = os.path.join(_DATA_DIR, f"{outcome}_train.csv")
+    train_csv  = os.path.join(_DATA_DIR, f"uri_{outcome}_train.csv")
     candidates = _CANDIDATES[outcome]
     print(f"[Stage 2/{outcome.upper()}] Running Boruta on {len(candidates)} candidates ...")
 

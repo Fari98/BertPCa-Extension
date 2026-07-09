@@ -23,7 +23,7 @@ import os
 import re
 import csv
 import warnings
-import numpy as np
+import numpy as npclaude
 import pandas as pd
 
 warnings.filterwarnings("ignore")
