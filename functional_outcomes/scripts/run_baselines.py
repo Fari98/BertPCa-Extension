@@ -33,31 +33,36 @@ from src.baselines.ddh import train_ddh, evaluate_ddh
 DATA_DIR = os.path.join(_REPO_ROOT, "functional_outcomes", "data")
 OUT_DIR = os.path.join(_REPO_ROOT, "functional_outcomes", "outputs")
 
+_PSA_DERIVED  = ["psa_nadir", "time_to_nadir", "psa_at_last_obs", "psa_slope", "n_psa_obs"]
+_EXTRA_STATIC = ["QoL_pre", "drs_max"]
+
 OUTCOME_CFG = {
     "ef": {
-        "train": "ef_train.csv",
-        "val":   "ef_val.csv",
-        "test":  "ef_test.csv",
+        "train": "uri_ef_train.csv",
+        "val":   "uri_ef_val.csv",
+        "test":  "uri_ef_test.csv",
+        "dynamic_col": "iief_ef",
         "static_cols": [
             "nerve_sparing", "IIEF_EFdomain_pre", "age", "tpsa", "bmi",
             "pathgg_group", "ece_bin", "svi_bin", "psm", "lni_bin",
             "neo_adjHT", "pstage",
-        ],
-        "p_times": np.array([14.0, 30.0, 60.0]),    # before most events (median tte~60d)
-        "e_times": np.array([60.0, 120.0, 180.0]),
+        ] + _EXTRA_STATIC + _PSA_DERIVED,
+        "p_times": np.array([45.0, 90.0, 180.0]),
+        "e_times": np.array([90.0, 180.0, 365.0]),
         "t_max": 365.0,
     },
     "uc": {
-        "train": "uc_train.csv",
-        "val":   "uc_val.csv",
-        "test":  "uc_test.csv",
+        "train": "uri_uc_train.csv",
+        "val":   "uri_uc_val.csv",
+        "test":  "uri_uc_test.csv",
+        "dynamic_col": "iciq_sf_tot",
         "static_cols": [
             "nerve_sparing", "IPSS_pre", "age", "tpsa", "bmi",
             "pathgg_group", "ece_bin", "svi_bin", "psm",
             "prostate_vol", "operative_time",
-        ],
-        "p_times": np.array([7.0, 14.0, 30.0]),
-        "e_times": np.array([30.0, 90.0, 180.0]),
+        ] + _EXTRA_STATIC + _PSA_DERIVED,
+        "p_times": np.array([45.0, 90.0, 180.0]),
+        "e_times": np.array([90.0, 180.0, 365.0]),
         "t_max": 365.0,
     },
 }
@@ -95,7 +100,8 @@ def run_nomogram(name: str, score_fn, train_pt, test_pt, e_times, t_max) -> dict
     return results
 
 
-def run_bertpca(model_path: str, train_df, test_df, static_cols, p_times, e_times, t_max) -> np.ndarray:
+def run_bertpca(model_path: str, train_df, test_df, static_cols, p_times, e_times, t_max,
+                dynamic_col: str = "iief_ef") -> np.ndarray:
     """Evaluate a saved BertPCa model using calculate_time_dependent_c_index.
 
     Applies the same min-max scaling (fit on train) and t_max normalisation that
@@ -110,7 +116,7 @@ def run_bertpca(model_path: str, train_df, test_df, static_cols, p_times, e_time
     print(f"  Loading BertPCa model from {model_path} ...")
     model = tf.keras.models.load_model(model_path, custom_objects={"weibull_loss": weibull_loss})
 
-    dynamic_features = ["times", "psa"]
+    dynamic_features = ["times", dynamic_col]
     features_to_scale = [f for f in static_cols + dynamic_features if f != "times"]
 
     # Fit scaling on train, apply to both splits (mirrors load_and_preprocess_data)
@@ -175,6 +181,7 @@ def format_table(results: dict, p_times: np.ndarray, e_times: np.ndarray) -> pd.
 def run_outcome(outcome: str, bertpca_model_path: str = None):
     cfg = OUTCOME_CFG[outcome]
     static_cols = cfg["static_cols"]
+    dynamic_col = cfg["dynamic_col"]
     p_times = cfg["p_times"]
     e_times = cfg["e_times"]
     t_max = cfg["t_max"]
@@ -250,7 +257,7 @@ def run_outcome(outcome: str, bertpca_model_path: str = None):
     if bertpca_model_path and os.path.exists(bertpca_model_path):
         print(f"\n[+] BertPCa from {bertpca_model_path} ...")
         try:
-            bp_res = run_bertpca(bertpca_model_path, train_df, test_df, static_cols, p_times, e_times, t_max)
+            bp_res = run_bertpca(bertpca_model_path, train_df, test_df, static_cols, p_times, e_times, t_max, dynamic_col)
             all_results["BertPCa"] = bp_res
             print(f"  Mean C-index: {float(np.nanmean(bp_res)):.4f}")
         except Exception as exc:

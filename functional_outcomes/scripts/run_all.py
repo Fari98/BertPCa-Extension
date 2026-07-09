@@ -36,8 +36,10 @@ _OUT_DIR   = os.path.join(_REPO_ROOT, "functional_outcomes", "outputs")
 SEP  = "=" * 65
 SEP2 = "-" * 65
 
-EF_P_TIMES = [14, 30, 60]
-EF_E_TIMES = [60, 120, 180]
+EF_P_TIMES = [45, 90, 180]
+EF_E_TIMES = [90, 180, 365]
+UC_P_TIMES = [45, 90, 180]
+UC_E_TIMES = [90, 180, 365]
 
 
 # ---------------------------------------------------------------------------
@@ -60,16 +62,16 @@ def _run(label: str, args: list, stop_on_failure: bool = True) -> bool:
     return True
 
 
-def _baseline_csv() -> str:
-    return os.path.join(_OUT_DIR, "baseline_results_ef.csv")
+def _baseline_csv(outcome: str) -> str:
+    return os.path.join(_OUT_DIR, f"baseline_results_{outcome}.csv")
 
 
-def _pipeline_cindex_csv() -> str:
-    return os.path.join(_OUT_DIR, "results", "ef_uri", "pipeline", "c_index_table.csv")
+def _pipeline_cindex_csv(outcome: str) -> str:
+    return os.path.join(_OUT_DIR, "results", f"{outcome}_uri", "pipeline", "c_index_table.csv")
 
 
-def _pipeline_model() -> str:
-    return os.path.join(_OUT_DIR, "models", "pipeline_model_ef.keras")
+def _pipeline_model(outcome: str) -> str:
+    return os.path.join(_OUT_DIR, "models", f"pipeline_model_{outcome}.keras")
 
 
 # ---------------------------------------------------------------------------
@@ -93,16 +95,16 @@ def step_prepare(force: bool) -> None:
 # ---------------------------------------------------------------------------
 
 def step_baselines(force: bool) -> None:
-    out = _baseline_csv()
-    if not force and os.path.exists(out):
-        print(f"\n[SKIP] Baselines — {os.path.basename(out)} exists "
-              "(use --force-baselines to re-run)")
+    out_ef = _baseline_csv("ef")
+    out_uc = _baseline_csv("uc")
+    if not force and os.path.exists(out_ef) and os.path.exists(out_uc):
+        print(f"\n[SKIP] Baselines — CSVs exist (use --force-baselines to re-run)")
         return
     _run(
-        "Step 2 — EF baselines (CAPRA-S, MSKCC, CoxPH, RSF, DDH)",
+        "Step 2 — EF + UC baselines (CAPRA-S, MSKCC, CoxPH, RSF, DDH)",
         [
             os.path.join(_SCRIPTS, "run_baselines.py"),
-            "--outcome", "ef",
+            "--outcome", "all",
         ],
         stop_on_failure=False,
     )
@@ -115,18 +117,18 @@ def step_baselines(force: bool) -> None:
 def step_bertpca_pipeline(n_trials: int, storage: str,
                            force_boruta: bool, force_hpt: bool,
                            force_train: bool) -> None:
-    model_path = _pipeline_model()
-    cindex_path = _pipeline_cindex_csv()
-
-    all_done = os.path.exists(model_path) and os.path.exists(cindex_path)
+    all_done = all(
+        os.path.exists(_pipeline_model(o)) and os.path.exists(_pipeline_cindex_csv(o))
+        for o in ("ef", "uc")
+    )
     if all_done and not any([force_boruta, force_hpt, force_train]):
-        print(f"\n[SKIP] BertPCa pipeline — model and c-index table exist "
+        print(f"\n[SKIP] BertPCa pipeline — models and c-index tables exist "
               "(use --force-train to retrain)")
         return
 
     pipeline_args = [
         os.path.join(_SCRIPTS, "run_pipeline.py"),
-        "--outcome", "ef",
+        "--outcome", "all",
         "--n-trials", str(n_trials),
     ]
     if storage:
@@ -148,87 +150,91 @@ def step_bertpca_pipeline(n_trials: int, storage: str,
 # Step 4 — Merge results and print comparison table
 # ---------------------------------------------------------------------------
 
-def _read_pipeline_cindex() -> np.ndarray | None:
+_OUTCOME_TIMES = {
+    "ef": {"p": EF_P_TIMES, "e": EF_E_TIMES, "label": "EF (IIEF>=17)"},
+    "uc": {"p": UC_P_TIMES, "e": UC_E_TIMES, "label": "UC (ICIQ=0)"},
+}
+
+
+def _read_pipeline_cindex(outcome: str) -> np.ndarray | None:
     """Read pipeline c-index CSV → (len(p_times), len(e_times)) array."""
-    path = _pipeline_cindex_csv()
+    path = _pipeline_cindex_csv(outcome)
+    e_times = _OUTCOME_TIMES[outcome]["e"]
     if not os.path.exists(path):
         print(f"  [WARNING] Pipeline c-index not found: {path}")
         return None
     df = pd.read_csv(path)
-    e_cols = [f"e_time_{int(e)}" for e in EF_E_TIMES]
+    e_cols = [f"e_time_{int(e)}" for e in e_times]
     available = [c for c in e_cols if c in df.columns]
     if not available:
-        # Report what columns are actually present to aid debugging
         print(f"  [WARNING] Expected {e_cols}, found: {list(df.columns)}")
         return None
     if len(available) < len(e_cols):
         print(f"  [WARNING] Only {len(available)}/{len(e_cols)} e_time columns found")
-    matrix = df[available].values.astype(float)
-    return matrix
+    return df[available].values.astype(float)
 
 
-def _bertpca_row(c_matrix: np.ndarray) -> dict:
+def _bertpca_row(c_matrix: np.ndarray, outcome: str) -> dict:
     """Convert c-index matrix to a flat row matching the baseline CSV format."""
+    p_times = _OUTCOME_TIMES[outcome]["p"]
+    e_times = _OUTCOME_TIMES[outcome]["e"]
     row = {"method": "BertPCa (pipeline)"}
-    idx = 0
     vals = []
-    for p in EF_P_TIMES:
-        for e in EF_E_TIMES:
+    for pi, p in enumerate(p_times):
+        for ei, e in enumerate(e_times):
             col = f"p{int(p)}_e{int(e)}"
-            v = float(c_matrix[EF_P_TIMES.index(p), EF_E_TIMES.index(e)])
+            v = float(c_matrix[pi, ei])
             row[col] = round(v, 6)
             vals.append(v)
-            idx += 1
     row["mean"] = round(float(np.nanmean(vals)), 6)
     return row
 
 
-def step_compare() -> None:
-    _hdr("Step 4 — Comparison table (baselines + BertPCa)")
+def _compare_outcome(outcome: str) -> None:
+    times = _OUTCOME_TIMES[outcome]
 
-    # Load baseline results
-    bl_path = _baseline_csv()
+    bl_path = _baseline_csv(outcome)
     if not os.path.exists(bl_path):
         print(f"  [WARNING] Baseline CSV not found: {bl_path}")
         df_bl = pd.DataFrame()
     else:
         df_bl = pd.read_csv(bl_path)
 
-    # Load BertPCa pipeline c-index
-    c_matrix = _read_pipeline_cindex()
-
+    c_matrix = _read_pipeline_cindex(outcome)
     if c_matrix is not None:
-        bp_row = _bertpca_row(c_matrix)
-        # Remove any previous BertPCa rows and append the new one
+        bp_row = _bertpca_row(c_matrix, outcome)
         if not df_bl.empty:
             df_bl = df_bl[~df_bl["method"].str.contains("BertPCa", na=False)]
         df_bl = pd.concat([df_bl, pd.DataFrame([bp_row])], ignore_index=True)
     else:
-        print("  BertPCa results unavailable — showing baselines only.")
+        print(f"  BertPCa {outcome.upper()} results unavailable — showing baselines only.")
 
     if df_bl.empty:
-        print("  No results to show.")
+        print(f"  No results to show for {outcome.upper()}.")
         return
 
-    # Pretty-print
-    print(f"\n  EF (IIEF>=17) — time-dependent C-index on test set")
-    print(f"  Prediction times: {EF_P_TIMES}d | Evaluation times: {EF_E_TIMES}d\n")
+    print(f"\n  {times['label']} — time-dependent C-index on test set")
+    print(f"  Prediction times: {times['p']}d | Evaluation times: {times['e']}d\n")
     print(df_bl.to_string(index=False, float_format=lambda x: f"{x:.3f}"))
 
-    # Save merged table
-    merged_path = os.path.join(_OUT_DIR, "full_results_ef.csv")
+    merged_path = os.path.join(_OUT_DIR, f"full_results_{outcome}.csv")
     df_bl.to_csv(merged_path, index=False)
     print(f"\n  Full results saved to {merged_path}")
 
-    # Ranked summary
     if "mean" in df_bl.columns:
         ranked = df_bl[["method", "mean"]].sort_values("mean", ascending=False)
         print(f"\n  {SEP2}")
-        print(f"  Ranked by mean C-index:")
+        print(f"  Ranked by mean C-index ({outcome.upper()}):")
         for _, r in ranked.iterrows():
             marker = " <-- BertPCa" if "BertPCa" in str(r["method"]) else ""
             print(f"    {r['method']:<28}  {r['mean']:.3f}{marker}")
         print(f"  {SEP2}")
+
+
+def step_compare() -> None:
+    _hdr("Step 4 — Comparison tables (baselines + BertPCa)")
+    for outcome in ("ef", "uc"):
+        _compare_outcome(outcome)
 
 
 # ---------------------------------------------------------------------------
@@ -236,15 +242,24 @@ def step_compare() -> None:
 # ---------------------------------------------------------------------------
 
 _BUNDLE_FILES = [
-    # comparison tables
-    ("outputs/full_results_ef.csv",                                 "full_results_ef.csv"),
-    ("outputs/baseline_results_ef.csv",                             "baseline_results_ef.csv"),
-    # pipeline internals
-    ("outputs/boruta_ef_features.json",                             "boruta_ef_features.json"),
-    ("outputs/hpt_best_ef.json",                                    "hpt_best_ef.json"),
-    # BertPCa evaluation
-    ("outputs/results/ef_uri/pipeline/c_index_table.csv",           "bertpca_c_index_table.csv"),
-    ("outputs/results/ef_uri/training_log.txt",                     "bertpca_training_log.txt"),
+    # EF comparison tables
+    ("outputs/full_results_ef.csv",                                  "full_results_ef.csv"),
+    ("outputs/baseline_results_ef.csv",                              "baseline_results_ef.csv"),
+    # EF pipeline internals
+    ("outputs/boruta_ef_features.json",                              "boruta_ef_features.json"),
+    ("outputs/hpt_best_ef.json",                                     "hpt_best_ef.json"),
+    # EF BertPCa evaluation
+    ("outputs/results/ef_uri/pipeline/c_index_table.csv",            "bertpca_ef_c_index_table.csv"),
+    ("outputs/results/ef_uri/training_log.txt",                      "bertpca_ef_training_log.txt"),
+    # UC comparison tables
+    ("outputs/full_results_uc.csv",                                  "full_results_uc.csv"),
+    ("outputs/baseline_results_uc.csv",                              "baseline_results_uc.csv"),
+    # UC pipeline internals
+    ("outputs/boruta_uc_features.json",                              "boruta_uc_features.json"),
+    ("outputs/hpt_best_uc.json",                                     "hpt_best_uc.json"),
+    # UC BertPCa evaluation
+    ("outputs/results/uc_uri/pipeline/c_index_table.csv",            "bertpca_uc_c_index_table.csv"),
+    ("outputs/results/uc_uri/training_log.txt",                      "bertpca_uc_training_log.txt"),
 ]
 
 
@@ -304,7 +319,7 @@ def main():
     args = parser.parse_args()
 
     print(f"\n{SEP}")
-    print(f"  BertPCa — Erectile Function (IIEF>=17) full pipeline")
+    print(f"  BertPCa — EF (IIEF>=17) + UC (ICIQ=0) full pipeline")
     print(f"  n_trials={args.n_trials}  storage={args.storage or 'in-memory'}")
     print(SEP)
 
@@ -330,7 +345,7 @@ def main():
 
     zip_path = step_bundle()
 
-    print(f"\n{SEP}\n  Done.  Download: {zip_path}\n{SEP}\n")
+    print(f"\n{SEP}\n  Done (EF + UC).  Bundle: {zip_path}\n{SEP}\n")
 
 
 if __name__ == "__main__":

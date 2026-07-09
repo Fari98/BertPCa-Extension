@@ -14,7 +14,7 @@ echo Waiting for Streamlit to start...
 timeout /t 5 /nobreak > nul
 
 echo Starting ngrok...
-start "ngrok tunnel" cmd /k "ngrok http %PORT%"
+start "ngrok tunnel" cmd /k "ngrok http 127.0.0.1:%PORT%"
 
 echo.
 echo Both windows are open.
