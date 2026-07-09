@@ -233,15 +233,17 @@ def stage_3_hpt(outcome: str, selected_features: list,
     set_seeds(config.SEED)
 
     print(f"[Stage 3/{outcome.upper()}] Loading data ({len(selected_features)} features) ...")
+    # Augmentation is disabled during HPT — it multiplies dataset size per patient
+    # and makes each trial much slower without meaningfully improving hyperparameter search.
     train_ds, val_ds, _, _, _, _ = load_and_preprocess_data(
         config.TRAIN_PATH, config.VAL_PATH, config.TEST_PATH,
         config.STATIC_FEATURES, config.DYNAMIC_FEATURES,
         config.SEQ_LENGTH, config.BATCH_SIZE,
-        config.T_MAX, config.AUGMENT_DATA, config.SCALE_FEATURES,
+        config.T_MAX, augment=False, scale_features=config.SCALE_FEATURES,
     )
     n_features = len(selected_features) + len(config.DYNAMIC_FEATURES)
 
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=10)
+    pruner = optuna.pruners.MedianPruner(n_startup_trials=3, n_warmup_steps=5)
     study  = optuna.create_study(
         direction="minimize",
         study_name=f"bertpca_{outcome}_pipeline_hpt",

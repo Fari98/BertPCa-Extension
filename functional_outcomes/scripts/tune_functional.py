@@ -35,8 +35,8 @@ from config.load_config import load_yaml_config
 
 _CONFIG_DIR = os.path.join(_REPO_ROOT, "functional_outcomes", "config")
 _CONFIG_MAP = {
-    "ef": os.path.join(_CONFIG_DIR, "config_ef.yaml"),
-    "uc": os.path.join(_CONFIG_DIR, "config_uc.yaml"),
+    "ef": os.path.join(_CONFIG_DIR, "config_ef_uri.yaml"),
+    "uc": os.path.join(_CONFIG_DIR, "config_uc_uri.yaml"),
 }
 
 
@@ -107,10 +107,10 @@ def _run_trial(trial, train_ds, val_ds, config, n_features: int) -> float:
     )
     val_tf = tf.data.Dataset.from_tensor_slices((X_val, y_val)).batch(batch_size)
 
-    # Shorter epochs for HPT — enough to detect instability and learning
-    max_epochs       = 60
-    patience         = 8
-    reduce_lr_wait   = 4
+    # Short epochs for HPT — just enough to detect if a config is promising
+    max_epochs       = 30
+    patience         = 6
+    reduce_lr_wait   = 3
     reduce_lr_factor = 0.5
     min_lr           = 1e-7
     clip_norm        = 0.5   # tighter than default 1.0 to reduce NaN collapse
@@ -220,7 +220,7 @@ def _tune_outcome(outcome: str, n_trials: int, study_name: str, storage: str):
     n_features = len(config.STATIC_FEATURES) + len(config.DYNAMIC_FEATURES)
 
     sname = study_name or f"bertpca_{outcome}_hpt"
-    pruner = optuna.pruners.MedianPruner(n_startup_trials=5, n_warmup_steps=10)
+    pruner = optuna.pruners.MedianPruner(n_startup_trials=3, n_warmup_steps=5)
     study = optuna.create_study(
         direction="minimize",
         study_name=sname,

@@ -33,8 +33,8 @@ from config.load_config import load_yaml_config
 
 _CONFIG_DIR = os.path.join(_REPO_ROOT, "functional_outcomes", "config")
 _CONFIG_MAP = {
-    "ef":     os.path.join(_CONFIG_DIR, "config_ef.yaml"),
-    "uc":     os.path.join(_CONFIG_DIR, "config_uc.yaml"),
+    "ef":     os.path.join(_CONFIG_DIR, "config_ef_uri.yaml"),
+    "uc":     os.path.join(_CONFIG_DIR, "config_uc_uri.yaml"),
     "ef_uri": os.path.join(_CONFIG_DIR, "config_ef_uri.yaml"),
     "uc_uri": os.path.join(_CONFIG_DIR, "config_uc_uri.yaml"),
 }
