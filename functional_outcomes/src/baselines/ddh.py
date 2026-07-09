@@ -31,13 +31,14 @@ def _pad_psa_sequences(
     df_long: pd.DataFrame,
     seq_length: int,
     t_max: float,
+    dynamic_col: str = "psa",
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Build padded PSA matrix and patient-level static arrays from long-format df.
+    Build padded dynamic-feature matrix from long-format df.
 
     Returns
     -------
-    psa_padded : (n_patients, seq_length)  — zero-padded PSA sequences
+    seq_padded  : (n_patients, seq_length)  — zero-padded sequences
     patient_ids : (n_patients,)
     """
     from tensorflow.keras.preprocessing.sequence import pad_sequences as keras_pad
@@ -46,7 +47,7 @@ def _pad_psa_sequences(
     seqs = []
     for pid in patient_ids:
         grp = df_long.loc[[pid]] if not isinstance(df_long.loc[pid], pd.Series) else df_long.loc[[pid]]
-        psa_vals = grp["psa"].values.astype(np.float32)
+        psa_vals = grp[dynamic_col].values.astype(np.float32)
         seqs.append(psa_vals.tolist())
 
     psa_padded = keras_pad(
@@ -126,17 +127,18 @@ def prepare_ddh_data(
     seq_length: int,
     n_bins: int,
     t_max: float,
+    dynamic_col: str = "psa",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Prepare inputs and labels for DDH training.
 
     Returns
     -------
-    psa_padded : (n_patients, seq_length)
+    seq_padded   : (n_patients, seq_length)
     static_feats : (n_patients, n_static)
-    labels : (n_patients, 2) — [bin_index, event]
+    labels       : (n_patients, 2) — [bin_index, event]
     """
-    psa_padded, patient_ids = _pad_psa_sequences(df_long, seq_length, t_max)
+    psa_padded, patient_ids = _pad_psa_sequences(df_long, seq_length, t_max, dynamic_col)
 
     # One row per patient
     pt = df_long.groupby(level=0)[feature_cols + ["tte", "label"]].first()
@@ -162,12 +164,13 @@ def train_ddh(
     learning_rate: float = 1e-3,
     patience: int = 10,
     seed: int = 42,
+    dynamic_col: str = "psa",
 ) -> keras.Model:
     """Train the DDH model and return the best model (by val loss)."""
     tf.random.set_seed(seed)
 
-    psa_tr, stat_tr, lab_tr = prepare_ddh_data(train_df, feature_cols, seq_length, n_bins, t_max)
-    psa_val, stat_val, lab_val = prepare_ddh_data(val_df, feature_cols, seq_length, n_bins, t_max)
+    psa_tr, stat_tr, lab_tr = prepare_ddh_data(train_df, feature_cols, seq_length, n_bins, t_max, dynamic_col)
+    psa_val, stat_val, lab_val = prepare_ddh_data(val_df, feature_cols, seq_length, n_bins, t_max, dynamic_col)
 
     # Normalise static features with train stats
     stat_mean = np.nanmean(stat_tr, axis=0)
@@ -251,6 +254,7 @@ def evaluate_ddh(
     feature_cols: List[str],
     p_times: np.ndarray,
     e_times: np.ndarray,
+    dynamic_col: str = "psa",
 ) -> np.ndarray:
     """
     Evaluate DDH using the weighted time-dependent C-index.
@@ -290,7 +294,7 @@ def evaluate_ddh(
         psa_masked = []
         for pid in test_pt.index:
             grp = test_df.loc[[pid]] if not isinstance(test_df.loc[pid], pd.Series) else test_df.loc[[pid]]
-            psa_sub = grp[grp["times"] <= p_time]["psa"].values.astype(np.float32)
+            psa_sub = grp[grp["times"] <= p_time][dynamic_col].values.astype(np.float32)
             psa_masked.append(psa_sub.tolist())
 
         from tensorflow.keras.preprocessing.sequence import pad_sequences as keras_pad
