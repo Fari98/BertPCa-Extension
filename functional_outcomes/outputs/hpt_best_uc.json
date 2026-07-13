@@ -5,19 +5,19 @@
     "drs_max"
   ],
   "n_trials": 50,
-  "best_val_nll": -10.994457085927328,
+  "best_val_nll": -11.020054499308268,
   "params": {
     "learning_rate": 5e-05,
     "batch_size": 32,
-    "dropout": 0.3,
-    "gamma": 0.5,
-    "num_encoder_layers": 2,
-    "intermediate_dim": 128,
+    "dropout": 0.1,
+    "gamma": 0.1,
+    "num_encoder_layers": 1,
+    "intermediate_dim": 64,
     "num_heads": 4,
-    "num_conv_blocks": 1,
+    "num_conv_blocks": 3,
     "filters": 64,
-    "kernel_size": 3,
+    "kernel_size": 5,
     "num_dense_layers": 3,
-    "dense_units": 128
+    "dense_units": 256
   }
 }
