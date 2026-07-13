@@ -26,7 +26,8 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
-    "pathgg_group"
+    "pathgg_group",
+    "pstage"
   ],
   "tentative": [],
   "include_tentative": false,
@@ -35,6 +36,7 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
-    "pathgg_group"
+    "pathgg_group",
+    "pstage"
   ]
 }

@@ -21,17 +21,13 @@
     "n_psa_obs"
   ],
   "confirmed": [
-    "nerve_sparing",
-    "IPSS_pre",
     "age",
-    "bmi"
+    "drs_max"
   ],
   "tentative": [],
   "include_tentative": false,
   "selected": [
-    "nerve_sparing",
-    "IPSS_pre",
     "age",
-    "bmi"
+    "drs_max"
   ]
 }

@@ -1,25 +1,23 @@
 {
   "outcome": "uc",
   "static_features": [
-    "nerve_sparing",
-    "IPSS_pre",
     "age",
-    "bmi"
+    "drs_max"
   ],
   "n_trials": 50,
-  "best_val_nll": -13.385156393051147,
+  "best_val_nll": -10.994457085927328,
   "params": {
     "learning_rate": 5e-05,
-    "batch_size": 64,
+    "batch_size": 32,
     "dropout": 0.3,
-    "gamma": 0.001,
+    "gamma": 0.5,
     "num_encoder_layers": 2,
-    "intermediate_dim": 256,
-    "num_heads": 2,
+    "intermediate_dim": 128,
+    "num_heads": 4,
     "num_conv_blocks": 1,
-    "filters": 128,
-    "kernel_size": 5,
+    "filters": 64,
+    "kernel_size": 3,
     "num_dense_layers": 3,
-    "dense_units": 256
+    "dense_units": 128
   }
 }

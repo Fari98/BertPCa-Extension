@@ -5,20 +5,21 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
-    "pathgg_group"
+    "pathgg_group",
+    "pstage"
   ],
   "n_trials": 50,
-  "best_val_nll": -2.4138714969158173,
+  "best_val_nll": -4.9807151726314,
   "params": {
     "learning_rate": 5e-05,
-    "batch_size": 64,
-    "dropout": 0.2,
-    "gamma": 0.3,
-    "num_encoder_layers": 2,
+    "batch_size": 32,
+    "dropout": 0.1,
+    "gamma": 1.0,
+    "num_encoder_layers": 1,
     "intermediate_dim": 256,
     "num_heads": 4,
     "num_conv_blocks": 1,
-    "filters": 128,
+    "filters": 64,
     "kernel_size": 5,
     "num_dense_layers": 3,
     "dense_units": 256
