@@ -197,7 +197,11 @@ def ranking_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     risk_diff = tf.clip_by_value(risk_i - risk_j, -10.0, 10.0)
     nu = tf.exp(-risk_diff / SIGMA)
 
-    return tf.reduce_sum(tf.where(mask, nu, tf.zeros_like(nu)))
+    # Normalize by number of valid pairs so ranking_loss stays O(1), matching
+    # weibull_loss (reduce_mean). Without this, ranking_loss scales as
+    # O(batch_size²) and dominates, causing gradient explosion after a few epochs.
+    n_valid = tf.maximum(tf.reduce_sum(tf.cast(mask, tf.float32)), 1.0)
+    return tf.reduce_sum(tf.where(mask, nu, tf.zeros_like(nu))) / n_valid
 
 
 def survival_contrastive_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
