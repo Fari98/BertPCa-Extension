@@ -26,8 +26,11 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
+    "bmi",
     "pathgg_group",
-    "pstage"
+    "ece_bin",
+    "pstage",
+    "time_to_nadir"
   ],
   "tentative": [],
   "include_tentative": false,
@@ -36,7 +39,10 @@
     "IIEF_EFdomain_pre",
     "age",
     "tpsa",
+    "bmi",
     "pathgg_group",
-    "pstage"
+    "ece_bin",
+    "pstage",
+    "time_to_nadir"
   ]
 }
