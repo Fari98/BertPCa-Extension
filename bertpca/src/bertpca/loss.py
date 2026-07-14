@@ -146,48 +146,58 @@ def ranking_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     tf.Tensor
         Scalar loss value
     """
-    SIGMA = 1
-    EPSILON = 1e-5
+    SIGMA   = 1.0
+    EPSILON = 1e-8
 
-    t = y_true[:, 0]  # Survival/censoring time
-    event = y_true[:, 1]  # Event indicator (1 = event, 0 = censored)
-    t_last = y_true[:, 2]  # Last observed time
+    t      = tf.cast(y_true[:, 0], tf.float32)
+    event  = tf.cast(y_true[:, 1], tf.float32)
+    t_last = tf.cast(y_true[:, 2], tf.float32)
 
-    alpha = y_pred[:, 0] + 1 + EPSILON  # Weibull scale parameter
-    beta = y_pred[:, 1] + 1  # Weibull shape parameter
+    # Same guards as weibull_loss: tf.maximum prevents alpha/beta going
+    # negative (raw model output can be arbitrarily negative early in training,
+    # and x**non_integer for x<0 is NaN).
+    alpha = tf.maximum(y_pred[:, 0] + 1.0, EPSILON)
+    beta  = tf.maximum(y_pred[:, 1] + 1.0, EPSILON)
 
-    # Compute all pairwise differences using broadcasting
-    s_i = tf.expand_dims(t, axis=1) - tf.expand_dims(t_last, axis=1)
-    s_j = tf.transpose(s_i)
+    def _log_S(t_val, a, b):
+        # log-survival: -(t/a)^b in log-space to prevent float32 overflow
+        # when beta is large or alpha is small.
+        log_ratio = tf.math.log(tf.maximum(t_val, EPSILON)) - tf.math.log(a)
+        return -tf.exp(tf.clip_by_value(b * log_ratio, -100.0, 100.0))
 
-    # Create mask: Compare t[i] < t[j] and event[i] == 1
-    mask = tf.logical_and(
-        s_i < s_j,
-        tf.expand_dims(event, axis=1) == 1
+    remaining_i = tf.expand_dims(t - t_last, axis=1)   # (batch, 1)
+    remaining_j = tf.transpose(remaining_i)              # (1, batch)
+
+    mask = tf.logical_and(remaining_i < remaining_j,
+                          tf.expand_dims(event, axis=1) == 1.0)
+
+    t_last_i = tf.expand_dims(t_last, axis=1)   # (batch, 1)
+    t_last_j = tf.expand_dims(t_last, axis=0)   # (1, batch)
+    alpha_i  = tf.expand_dims(alpha,  axis=1)
+    beta_i   = tf.expand_dims(beta,   axis=1)
+    alpha_j  = tf.expand_dims(alpha,  axis=0)
+    beta_j   = tf.expand_dims(beta,   axis=0)
+
+    # Conditional risk for patient i: 1 - S(t_i) / S(t_last_i)
+    log_S_ratio_i = tf.clip_by_value(
+        _log_S(t_last_i + remaining_i, alpha_i, beta_i)
+        - _log_S(tf.maximum(t_last_i, EPSILON), alpha_i, beta_i),
+        -100.0, 0.0,
     )
+    risk_i = 1.0 - tf.exp(log_S_ratio_i)
 
-    s_i = tf.cast(s_i, tf.float32)
-    t_last = tf.cast(t_last, tf.float32)
-    beta = tf.cast(beta, tf.float32)
+    # Conditional risk for patient j at the same remaining-time horizon
+    log_S_ratio_j = tf.clip_by_value(
+        _log_S(t_last_j + remaining_i, alpha_j, beta_j)
+        - _log_S(tf.maximum(t_last_j, EPSILON), alpha_j, beta_j),
+        -100.0, 0.0,
+    )
+    risk_j = 1.0 - tf.exp(log_S_ratio_j)
 
-    # Compute risk scores for all patients
-    S_num = tf.exp(-(((s_i + tf.expand_dims(t_last, axis=1)) / alpha) ** beta))
-    S_den = tf.exp(-((tf.expand_dims(t_last, axis=1) / alpha) ** beta))
-    risk_i = 1 - S_num / (S_den + EPSILON)
+    risk_diff = tf.clip_by_value(risk_i - risk_j, -10.0, 10.0)
+    nu = tf.exp(-risk_diff / SIGMA)
 
-    S_num_j = tf.exp(-(((s_i + tf.expand_dims(t_last, axis=0)) / alpha) ** beta))
-    S_den_j = tf.exp(-((tf.expand_dims(t_last, axis=0) / alpha) ** beta))
-    risk_j = 1 - S_num_j / (S_den_j + EPSILON)
-
-    # Compute pairwise ranking loss term
-    risk_diff = risk_i - risk_j
-    risk_diff_clipped = tf.clip_by_value(risk_diff, -10, 10)
-    nu = tf.exp(-risk_diff_clipped / SIGMA)
-
-    # Apply mask to only keep valid pairs
-    loss = tf.reduce_sum(tf.where(mask, nu, tf.zeros_like(nu)))
-
-    return loss
+    return tf.reduce_sum(tf.where(mask, nu, tf.zeros_like(nu)))
 
 
 def survival_contrastive_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
