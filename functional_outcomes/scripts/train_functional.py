@@ -102,6 +102,22 @@ def train_model(config, output_path=None):
         keras.backend.clear_session()
         model = build_bert_pca(n_features=n_features, seq_length=config.SEQ_LENGTH, **config.MODEL_CONFIG)
 
+        # Apply ranking loss with HPT-selected gamma if > 0
+        gamma = float(config.MODEL_CONFIG.get("gamma", 0.0))
+        if gamma > 0.0:
+            from bertpca.loss import ranking_loss as _ranking_loss, weibull_loss as _weibull_loss
+            _g = tf.constant(gamma, dtype=tf.float32)
+
+            def combined_loss(y_true, y_pred):
+                wl = _weibull_loss(y_true, y_pred)
+                rl = _ranking_loss(y_true, y_pred)
+                rl = tf.where(tf.math.is_nan(rl), tf.zeros_like(rl), rl)
+                return wl + _g * rl
+
+            lr = float(model.optimizer.learning_rate.numpy())
+            model.compile(optimizer=keras.optimizers.RMSprop(lr), loss=combined_loss)
+            print(f"Using combined Weibull + ranking loss (gamma={gamma})")
+
         X_train = np.array(train_ds["features"])
         y_train = np.array(train_ds["labels_surv"])
         X_val = np.array(val_ds["features"])
@@ -133,8 +149,9 @@ def train_model(config, output_path=None):
 
         print("\nTest C-Index Results:")
         print(test_results)
-        mean_c = float(np.mean(test_results))
-        print(f"\nMean C-Index: {mean_c:.6f}")
+        valid_results = np.where(test_results == -1.0, np.nan, test_results)
+        mean_c = float(np.nanmean(valid_results))
+        print(f"\nMean C-Index (valid cells only): {mean_c:.6f}")
 
         if results_dir:
             with open(os.path.join(results_dir, "mean_c_index.txt"), "w") as f:
@@ -151,6 +168,10 @@ def train_model(config, output_path=None):
             os.makedirs(config.MODEL_DIR, exist_ok=True)
             output_path = os.path.join(config.MODEL_DIR, "best_model.keras")
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        # Recompile with the registered weibull_loss so the .keras file loads cleanly
+        if gamma > 0.0:
+            from bertpca.loss import weibull_loss as _weibull_loss
+            model.compile(optimizer=model.optimizer, loss=_weibull_loss)
         model.save(output_path)
         print(f"Model saved to {output_path}")
 

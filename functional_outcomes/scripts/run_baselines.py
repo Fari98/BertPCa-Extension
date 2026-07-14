@@ -112,7 +112,9 @@ def format_table(results: dict, p_times: np.ndarray, e_times: np.ndarray) -> pd.
     for method, vals in results.items():
         if isinstance(vals, np.ndarray):
             flat = vals.flatten().tolist()
-            mean = float(np.nanmean(vals))
+            # exclude -1.0 sentinel (IPCW failure / degenerate e<=p cells) from mean
+            valid = np.where(vals == -1.0, np.nan, vals)
+            mean = float(np.nanmean(valid))
         elif isinstance(vals, dict):
             # nomograms: only e_times, no p_times — replicate across p_times
             flat = []

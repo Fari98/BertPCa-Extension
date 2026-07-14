@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 """
-End-to-end functional outcomes pipeline for EF (IIEF >= 17).
+End-to-end functional outcomes pipeline for EF (IIEF >= 17) and UC (ICIQ = 0).
 
 Steps
 -----
-  1. Dataset preparation  (prepare_dataset.py)
-  2. Baseline evaluation  (CAPRA-S, MSKCC, CoxPH, RSF, DDH — no BertPCa yet)
-  3. BertPCa pipeline     (Boruta feature selection → HPT → full training)
+  1. Dataset preparation  (prepare_dataset_uri.py)
+  2. Baseline evaluation  (CAPRA-S, MSKCC, CoxPH, RSF, DDH)
+  3. BertPCa pipeline     (Boruta feature selection → training with YAML params)
   4. Comparison table     (merge baseline + BertPCa results, print & save)
 
-Each step checks for its output and skips if already done unless a --force
-flag overrides. Run from the repo root:
+Run from the repo root:
 
   python functional_outcomes/scripts/run_all.py
-  python functional_outcomes/scripts/run_all.py --n-trials 100
   python functional_outcomes/scripts/run_all.py --skip-baselines --force-train
 """
 
@@ -114,34 +112,13 @@ def step_baselines(force: bool) -> None:
 # Step 3 — BertPCa pipeline (Boruta → HPT → train → eval)
 # ---------------------------------------------------------------------------
 
-def step_bertpca_pipeline(n_trials: int, storage: str,
-                           force_boruta: bool, force_hpt: bool,
-                           force_train: bool) -> None:
-    all_done = all(
-        os.path.exists(_pipeline_model(o)) and os.path.exists(_pipeline_cindex_csv(o))
-        for o in ("ef", "uc")
-    )
-    if all_done and not any([force_boruta, force_hpt, force_train]):
-        print(f"\n[SKIP] BertPCa pipeline — models and c-index tables exist "
-              "(use --force-train to retrain)")
-        return
-
+def step_bertpca_pipeline() -> None:
     pipeline_args = [
         os.path.join(_SCRIPTS, "run_pipeline.py"),
         "--outcome", "all",
-        "--n-trials", str(n_trials),
     ]
-    if storage:
-        pipeline_args += ["--storage", storage]
-    if force_boruta:
-        pipeline_args.append("--force-boruta")
-    if force_hpt:
-        pipeline_args.append("--force-hpt")
-    if force_train:
-        pipeline_args.append("--force-train")
-
     _run(
-        f"Step 3 — BertPCa pipeline: Boruta + HPT ({n_trials} trials) + train",
+        "Step 3 — BertPCa pipeline: Boruta + train",
         pipeline_args,
     )
 
@@ -185,8 +162,9 @@ def _bertpca_row(c_matrix: np.ndarray, outcome: str) -> dict:
             col = f"p{int(p)}_e{int(e)}"
             v = float(c_matrix[pi, ei])
             row[col] = round(v, 6)
-            vals.append(v)
-    row["mean"] = round(float(np.nanmean(vals)), 6)
+            if v != -1.0:  # exclude -1.0 sentinel (IPCW failure / e<=p cells)
+                vals.append(v)
+    row["mean"] = round(float(np.nanmean(vals)) if vals else np.nan, 6)
     return row
 
 
@@ -298,29 +276,18 @@ def main():
     parser = argparse.ArgumentParser(
         description="Full EF functional outcomes pipeline: data → baselines → BertPCa → comparison"
     )
-    parser.add_argument("--n-trials",         type=int, default=50,
-                        help="Optuna HPT trials for BertPCa (default: 50)")
-    parser.add_argument("--storage",          type=str, default=None,
-                        help="Optuna storage URL for resumable HPT "
-                             "(e.g. sqlite:///functional_outcomes/outputs/hpt.db)")
-
     # Opt-out flags — use these to skip individual stages
     parser.add_argument("--skip-baselines",  action="store_true",
                         help="Skip baseline evaluation")
     parser.add_argument("--skip-pipeline",   action="store_true",
-                        help="Skip BertPCa pipeline (Boruta+HPT+train)")
+                        help="Skip BertPCa pipeline (Boruta+train)")
     parser.add_argument("--skip-prepare",    action="store_true",
                         help="Skip dataset preparation (reuse existing CSVs)")
-    parser.add_argument("--skip-boruta",     action="store_true",
-                        help="Skip Boruta (reuse cached boruta_ef_features.json)")
-    parser.add_argument("--skip-hpt",        action="store_true",
-                        help="Skip HPT (reuse cached hpt_best_ef.json)")
 
     args = parser.parse_args()
 
     print(f"\n{SEP}")
     print(f"  BertPCa — EF (IIEF>=17) + UC (ICIQ=0) full pipeline")
-    print(f"  n_trials={args.n_trials}  storage={args.storage or 'in-memory'}")
     print(SEP)
 
     step_prepare(force=not args.skip_prepare)
@@ -331,13 +298,7 @@ def main():
         print("\n[SKIP] Baselines (--skip-baselines)")
 
     if not args.skip_pipeline:
-        step_bertpca_pipeline(
-            n_trials=args.n_trials,
-            storage=args.storage,
-            force_boruta=not args.skip_boruta,
-            force_hpt=not args.skip_hpt,
-            force_train=True,
-        )
+        step_bertpca_pipeline()
     else:
         print("\n[SKIP] BertPCa pipeline (--skip-pipeline)")
 
