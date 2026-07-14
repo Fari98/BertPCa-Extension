@@ -702,7 +702,7 @@ else:
     cmp_df = _show_model_comparison(c_matrix, baseline_results, milan_results, df_raw)
     _bundle["model_comparison.csv"] = cmp_df.reset_index().to_csv(index=False).encode()
 
-# ── Download all results ──────────────────────────────────────────────────────
+# ── Download all results (current session) ───────────────────────────────────
 if _bundle:
     import io, zipfile as _zf
     st.markdown("---")
@@ -719,3 +719,60 @@ if _bundle:
         type="primary",
         use_container_width=True,
     )
+
+# ── Previously saved results (survives session resets) ───────────────────────
+st.markdown("---")
+with st.expander("Download previously saved results", expanded=not bool(_bundle)):
+    import io as _io, zipfile as _zf2, glob as _glob
+
+    saved_predictions = sorted(
+        _glob.glob(os.path.join(_PRED_DIR, "predictions_*.csv")), reverse=True
+    )
+    saved_cindex = sorted(
+        _glob.glob(os.path.join(_RESULTS_DIR, "c_index_*.csv")), reverse=True
+    )
+    saved_models = sorted(
+        _glob.glob(os.path.join(_MODELS_DIR, "app_trained_*.keras")), reverse=True
+    )
+
+    all_saved = saved_predictions + saved_cindex + saved_models
+    if not all_saved:
+        st.info("No previously saved results found.")
+    else:
+        st.caption(
+            f"Found {len(saved_predictions)} prediction file(s), "
+            f"{len(saved_cindex)} C-index file(s), "
+            f"{len(saved_models)} trained model(s)."
+        )
+
+        # Individual file downloads
+        for path in all_saved:
+            fname = os.path.basename(path)
+            mtime = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d %H:%M:%S")
+            size_kb = os.path.getsize(path) / 1024
+            with open(path, "rb") as fh:
+                data = fh.read()
+            mime = "application/octet-stream" if path.endswith(".keras") else "text/csv"
+            st.download_button(
+                f"{fname}  ({size_kb:.0f} KB · saved {mtime})",
+                data,
+                file_name=fname,
+                mime=mime,
+                key=f"dl_{fname}",
+            )
+
+        # Bundle all into one zip
+        st.markdown("**Or download everything at once:**")
+        buf2 = _io.BytesIO()
+        with _zf2.ZipFile(buf2, "w", compression=_zf2.ZIP_DEFLATED) as zf2:
+            for path in saved_predictions + saved_cindex:
+                zf2.write(path, os.path.basename(path))
+        buf2.seek(0)
+        st.download_button(
+            "Download all saved CSVs (.zip)",
+            buf2.getvalue(),
+            file_name=f"bertpca_saved_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+            mime="application/zip",
+            use_container_width=True,
+            key="dl_all_saved",
+        )
