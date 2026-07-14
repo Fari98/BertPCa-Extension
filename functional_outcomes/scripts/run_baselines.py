@@ -47,9 +47,9 @@ OUTCOME_CFG = {
             "pathgg_group", "ece_bin", "svi_bin", "psm", "lni_bin",
             "neo_adjHT", "pstage",
         ] + _EXTRA_STATIC + _PSA_DERIVED,
-        "p_times": np.array([45.0, 90.0, 180.0]),
-        "e_times": np.array([90.0, 180.0, 365.0]),
-        "t_max": 365.0,
+        "p_times": np.array([90.0, 180.0, 365.0]),
+        "e_times": np.array([180.0, 365.0, 730.0]),
+        "t_max": 730.0,
     },
     "uc": {
         "train": "uri_uc_train.csv",

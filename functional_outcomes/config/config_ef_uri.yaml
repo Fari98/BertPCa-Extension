@@ -35,8 +35,8 @@ dynamic_features:
   - iief_ef
 
 batch_size: 32
-seq_length: 16
-t_max: 365.0
+seq_length: 24
+t_max: 730.0
 augment_data: true
 scale_features: true
 
@@ -66,9 +66,10 @@ training:
   verbose: "auto"
 
 evaluation:
-  # p_times aligned with typical URI visit schedule: FUP40 (~40d), 3mo, 6mo
-  p_times: [45, 90, 180]
-  e_times: [90, 180, 365]
+  # p_times aligned with URI visit schedule: 3mo, 6mo, 12mo
+  # e_times span the 24-month EF recovery window
+  p_times: [90, 180, 365]
+  e_times: [180, 365, 730]
 
 tuning:
   n_trials: 100

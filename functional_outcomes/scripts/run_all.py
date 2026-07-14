@@ -34,8 +34,8 @@ _OUT_DIR   = os.path.join(_REPO_ROOT, "functional_outcomes", "outputs")
 SEP  = "=" * 65
 SEP2 = "-" * 65
 
-EF_P_TIMES = [45, 90, 180]
-EF_E_TIMES = [90, 180, 365]
+EF_P_TIMES = [90, 180, 365]
+EF_E_TIMES = [180, 365, 730]
 UC_P_TIMES = [45, 90, 180]
 UC_E_TIMES = [90, 180, 365]
 

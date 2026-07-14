@@ -35,8 +35,15 @@ URI_EF_LONG = os.path.join("functional_outcomes", "data", "uri_ef_long.csv")
 URI_UC_LONG = os.path.join("functional_outcomes", "data", "uri_uc_long.csv")
 OUT_DIR     = os.path.join("functional_outcomes", "data")
 
-T_MAX       = 365.0   # cap observations and tte at 1 year
+T_MAX_UC     = 365.0   # 12 months: UC recovery peaks in first year
+T_MAX_EF     = 730.0   # 24 months: EF recovery median ~20 months, need wider window
+T_MAX        = T_MAX_UC  # legacy alias used by load_uri_long default
 RANDOM_STATE = 42
+
+# ttIIEF_17 and ttICIQ in the Milan RData are in MONTHS;
+# observation times in the URI CSVs are in DAYS (visit_month × 30.4375).
+# Both get divided by t_max in load_and_preprocess_data, so they must share units.
+DAYS_PER_MONTH = 30.44  # matches URI CSV convention (visit months × 30.44 = days)
 
 
 # ---------------------------------------------------------------------------
@@ -174,10 +181,15 @@ def load_uri_long(csv_path: str, value_col: str, t_max: float = T_MAX) -> pd.Dat
 # ---------------------------------------------------------------------------
 
 def assemble_outcome_uri(df_static, dyn_long, value_col,
-                          outcome_col, time_col, static_cols):
+                          outcome_col, time_col, static_cols,
+                          t_max=T_MAX_UC, tte_scale=1.0):
     """
     Build per-observation DataFrame for one outcome.
     dyn_long has columns [id, times, <value_col>].
+
+    tte_scale converts time_col units to days (e.g. DAYS_PER_MONTH when
+    the RData stores times in months but URI CSVs use days).
+    Events that fall after t_max are recoded as censored at t_max.
     """
     has_outcome = df_static[outcome_col].notna() & df_static[time_col].notna()
     dyn_ids = set(dyn_long["id"].unique())
@@ -185,7 +197,10 @@ def assemble_outcome_uri(df_static, dyn_long, value_col,
 
     df_s = df_static.loc[valid_ids, static_cols + [outcome_col, time_col]].copy()
     df_s["label"] = df_s[outcome_col].astype(int)
-    df_s["tte"]   = df_s[time_col].clip(upper=T_MAX)
+    tte_days = df_s[time_col] * tte_scale
+    # Events beyond the study window become censored at t_max
+    df_s.loc[tte_days > t_max, "label"] = 0
+    df_s["tte"] = tte_days.clip(upper=t_max)
     df_s = df_s[df_s["tte"] > 0]
 
     dyn_sub = dyn_long[dyn_long["id"].isin(df_s.index)].copy()
@@ -196,6 +211,13 @@ def assemble_outcome_uri(df_static, dyn_long, value_col,
         if pid not in df_s.index:
             continue
         row = df_s.loc[pid]
+        # Keep only observations up to tte (mirrors BCR truncation at event time).
+        # This ensures t_last <= tte so the Weibull loss interval is non-negative.
+        # Post-recovery observations are informative but would make t_last > tte
+        # and collapse t_new = max(tte - t_last, ε) to ε for almost every patient.
+        grp = grp[grp["times"] <= row["tte"]]
+        if grp.empty:
+            continue  # no pre-event observations for this patient — skip
         for _, dyn_row in grp.iterrows():
             rec = {
                 "id":       pid,
@@ -289,15 +311,16 @@ def main():
 
     # ── EF dataset: IIEF_EF as dynamic feature ───────────────────────────────
     print(f"\nLoading URI IIEF time series: {URI_EF_LONG}")
-    ef_dyn = load_uri_long(URI_EF_LONG, "iief_ef", T_MAX)
+    ef_dyn = load_uri_long(URI_EF_LONG, "iief_ef", T_MAX_EF)
     print(f"  {len(ef_dyn)} observations across {ef_dyn['id'].nunique()} patients "
-          f"(within {T_MAX:.0f} days)")
+          f"(within {T_MAX_EF:.0f} days / 24 months)")
 
     print("Building EF dataset (IIEF_EF as dynamic feature, IIEF>=17 outcome) ...")
     ef_long = assemble_outcome_uri(
         df, ef_dyn, "iief_ef",
         outcome_col="IIEF_17", time_col="ttIIEF_17",
         static_cols=EF_STATIC,
+        t_max=T_MAX_EF, tte_scale=DAYS_PER_MONTH,
     )
     print(f"  Patients: {ef_long.index.nunique()}, observations: {len(ef_long)}")
     n_events = ef_long.groupby(level=0)["label"].first().sum()
@@ -313,15 +336,16 @@ def main():
 
     # ── UC dataset: iciq_sf_tot as dynamic feature ────────────────────────────
     print(f"\nLoading URI ICIQ time series: {URI_UC_LONG}")
-    uc_dyn = load_uri_long(URI_UC_LONG, "iciq_sf_tot", T_MAX)
+    uc_dyn = load_uri_long(URI_UC_LONG, "iciq_sf_tot", T_MAX_UC)
     print(f"  {len(uc_dyn)} observations across {uc_dyn['id'].nunique()} patients "
-          f"(within {T_MAX:.0f} days)")
+          f"(within {T_MAX_UC:.0f} days / 12 months)")
 
     print("Building UC dataset (iciq_sf_tot as dynamic feature, ICIQ=0 outcome) ...")
     uc_long = assemble_outcome_uri(
         df, uc_dyn, "iciq_sf_tot",
         outcome_col="ICIQ", time_col="ttICIQ",
         static_cols=UC_STATIC,
+        t_max=T_MAX_UC, tte_scale=DAYS_PER_MONTH,
     )
     print(f"  Patients: {uc_long.index.nunique()}, observations: {len(uc_long)}")
     n_events_uc = uc_long.groupby(level=0)["label"].first().sum()
