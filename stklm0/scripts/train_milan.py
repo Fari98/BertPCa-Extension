@@ -63,6 +63,32 @@ class Tee:
         return getattr(self._stream, name)
 
 
+def _make_stratified_loader(X, y, batch_size):
+    """Stratified mini-batch loader that guarantees events appear in every batch.
+
+    Targets ~25 % events per batch regardless of the actual event rate — critical
+    when the event rate is < 10 % (e.g. CSM at 0.6 %) where random batching
+    leaves 90 % of mini-batches with zero event gradient signal.
+    """
+    events_mask = y[:, 1] == 1
+    X_ev, y_ev = X[events_mask], y[events_mask]
+    X_ce, y_ce = X[~events_mask], y[~events_mask]
+
+    n_ev_per_batch = max(2, batch_size // 4)
+    n_ce_per_batch = batch_size - n_ev_per_batch
+
+    ds_ev = (tf.data.Dataset.from_tensor_slices((X_ev, y_ev))
+             .shuffle(max(len(X_ev), 1)).repeat()
+             .batch(n_ev_per_batch, drop_remainder=True))
+    ds_ce = (tf.data.Dataset.from_tensor_slices((X_ce, y_ce))
+             .shuffle(max(len(X_ce), 1)).repeat()
+             .batch(n_ce_per_batch, drop_remainder=True))
+
+    return (tf.data.Dataset.zip((ds_ev, ds_ce))
+            .map(lambda e, c: (tf.concat([e[0], c[0]], axis=0),
+                               tf.concat([e[1], c[1]], axis=0))))
+
+
 def _load_csv(path):
     df = pd.read_csv(path)
     df.set_index("id", inplace=True)
@@ -150,9 +176,17 @@ def run(outcome: str, output_path: str = None):
         y_val   = np.array(val_ds["labels_surv"])
 
         batch_size = config.TRAINING_CONFIG["batch_size"]
-        train_tf   = (tf.data.Dataset.from_tensor_slices((X_train, y_train))
-                      .shuffle(1024).batch(batch_size))
-        val_tf     = tf.data.Dataset.from_tensor_slices((X_val, y_val)).batch(batch_size)
+        event_rate = float(y_train[:, 1].mean())
+        if event_rate < 0.10:
+            # Stratified batching for rare events: guarantees ≥2 events per batch
+            steps_per_epoch = int(np.ceil(len(X_train) / batch_size))
+            train_tf = _make_stratified_loader(X_train, y_train, batch_size).take(steps_per_epoch)
+            print(f"  Stratified batching enabled (event rate {event_rate:.1%}, "
+                  f"{max(2, batch_size // 4)} events/batch)")
+        else:
+            train_tf = (tf.data.Dataset.from_tensor_slices((X_train, y_train))
+                        .shuffle(1024).batch(batch_size))
+        val_tf = tf.data.Dataset.from_tensor_slices((X_val, y_val)).batch(batch_size)
 
         n_features = len(available_static) + len(dynamic_features)
         print(f"\nBuilding model ({n_features} features) ...")
@@ -160,13 +194,15 @@ def run(outcome: str, output_path: str = None):
         model = build_bert_pca(n_features=n_features, seq_length=config.SEQ_LENGTH,
                                 **config.MODEL_CONFIG)
 
-        print(f"Training BertPCa on Milan {outcome.upper()} ...")
+        gamma = config.MODEL_CONFIG.get("gamma", 0.0)
+        print(f"Training BertPCa on Milan {outcome.upper()} (gamma={gamma}) ...")
         model, _ = training_loop(
             model, train_tf, val_tf,
             y_train=y_train_struct, y_val=y_val_struct,
             training_config=config.TRAINING_CONFIG,
             evaluation_config=config.EVALUATION_CONFIG,
             c_index_interval=5,
+            gamma=gamma,
         )
         print("Training complete.")
 

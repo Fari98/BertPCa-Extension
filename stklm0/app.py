@@ -236,16 +236,38 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
     y_val_surv   = np.array(val_ds["labels_surv"])
 
     bs = config.TRAINING_CONFIG["batch_size"]
-    train_tf = tf.data.Dataset.from_tensor_slices((X_train, y_train_surv)).shuffle(1024).batch(bs)
-    val_tf   = tf.data.Dataset.from_tensor_slices((X_val, y_val_surv)).batch(bs)
+    event_rate = float(y_train_surv[:, 1].mean())
+    if event_rate < 0.10:
+        n_ev_per_batch = max(2, bs // 4)
+        n_ce_per_batch = bs - n_ev_per_batch
+        ev_mask = y_train_surv[:, 1] == 1
+        X_ev, y_ev = X_train[ev_mask], y_train_surv[ev_mask]
+        X_ce, y_ce = X_train[~ev_mask], y_train_surv[~ev_mask]
+        steps_per_epoch = int(np.ceil(len(X_train) / bs))
+        ds_ev = (tf.data.Dataset.from_tensor_slices((X_ev, y_ev))
+                 .shuffle(max(len(X_ev), 1)).repeat()
+                 .batch(n_ev_per_batch, drop_remainder=True))
+        ds_ce = (tf.data.Dataset.from_tensor_slices((X_ce, y_ce))
+                 .shuffle(max(len(X_ce), 1)).repeat()
+                 .batch(n_ce_per_batch, drop_remainder=True))
+        train_tf = (tf.data.Dataset.zip((ds_ev, ds_ce))
+                    .map(lambda e, c: (tf.concat([e[0], c[0]], axis=0),
+                                       tf.concat([e[1], c[1]], axis=0)))
+                    .take(steps_per_epoch))
+        log(f"Stratified batching: event rate {event_rate:.1%} → {n_ev_per_batch} events/batch")
+    else:
+        train_tf = tf.data.Dataset.from_tensor_slices((X_train, y_train_surv)).shuffle(1024).batch(bs)
+    val_tf = tf.data.Dataset.from_tensor_slices((X_val, y_val_surv)).batch(bs)
 
-    log("Training BertPCa … (this may take several minutes)")
+    gamma = config.MODEL_CONFIG.get("gamma", 0.0)
+    log(f"Training BertPCa … (this may take several minutes, gamma={gamma})")
     model, _ = training_loop(
         model, train_tf, val_tf,
         y_train=y_train, y_val=y_val,
         training_config=config.TRAINING_CONFIG,
         evaluation_config=config.EVALUATION_CONFIG,
         c_index_interval=999,
+        gamma=gamma,
     )
 
     log("Evaluating on test set …")

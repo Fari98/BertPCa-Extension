@@ -76,8 +76,21 @@ def weibull_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     log_likelihood_event    = log_hazard + log_s
     log_likelihood_censored = log_s
 
-    log_likelihood = (event * log_likelihood_event
-                      + (1.0 - event) * log_likelihood_censored)
+    # Class-balanced weighting: equalise gradient contribution from events and
+    # censored patients regardless of their ratio in the batch.  With 0.6% event
+    # rate and batch_size=16 this prevents the model collapsing to survival=1.
+    #
+    # Derivation: weight events by n/(2·n_e) and censored by n/(2·n_c).
+    # reduce_mean then gives 0.5·mean_event_ll + 0.5·mean_censored_ll, i.e.
+    # equal gradient mass for both groups however imbalanced the batch is.
+    n_total    = tf.cast(tf.shape(event)[0], tf.float64)
+    n_events   = tf.maximum(tf.reduce_sum(event), 1.0)
+    n_censored = tf.maximum(n_total - n_events, 1.0)
+    w_event    = n_total / (2.0 * n_events)
+    w_censored = n_total / (2.0 * n_censored)
+
+    log_likelihood = (event * w_event * log_likelihood_event
+                      + (1.0 - event) * w_censored * log_likelihood_censored)
     log_likelihood = tf.clip_by_value(log_likelihood, -1e6, 1e6)
 
     return tf.cast(-tf.reduce_mean(log_likelihood), tf.float32)

@@ -7,6 +7,7 @@ import tensorflow as tf
 from tensorflow.keras.utils import Progbar
 
 from .evaluation import calculate_time_dependent_c_index
+from .loss import ranking_loss as _ranking_loss
 
 TRAINING_LOG_FILENAME = "training_log.txt"
 
@@ -20,6 +21,7 @@ def training_loop(
     y_val=None,
     evaluation_config=None,
     c_index_interval: int = 5,
+    gamma: float = 0.0,
 ):
     """
     Run the training loop: train and validate per epoch with early stopping
@@ -96,6 +98,9 @@ def training_loop(
             with tf.GradientTape() as tape:
                 y_pred = model(x_batch, training=True)
                 loss_value = loss_fn(y_batch, y_pred)
+                if gamma > 0.0:
+                    rl = tf.cast(_ranking_loss(y_batch, y_pred), loss_value.dtype)
+                    loss_value = loss_value + tf.cast(gamma, loss_value.dtype) * rl
 
             if tf.math.is_nan(loss_value):
                 print(
