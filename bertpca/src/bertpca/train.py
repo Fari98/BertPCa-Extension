@@ -99,12 +99,15 @@ def training_loop(
                 y_pred = model(x_batch, training=True)
                 loss_value = loss_fn(y_batch, y_pred)
                 if gamma > 0.0:
-                    rl = tf.cast(_ranking_loss(y_batch, y_pred), loss_value.dtype)
-                    loss_value = loss_value + tf.cast(gamma, loss_value.dtype) * rl
+                    rl = _ranking_loss(y_batch, y_pred)
+                    if not (tf.math.is_nan(rl) or tf.math.is_inf(rl)):
+                        loss_value = (loss_value
+                                      + tf.cast(gamma, loss_value.dtype)
+                                      * tf.cast(rl, loss_value.dtype))
 
-            if tf.math.is_nan(loss_value):
+            if tf.math.is_nan(loss_value) or tf.math.is_inf(loss_value):
                 print(
-                    f"WARNING: NaN loss detected at epoch {epoch + 1}, batch {batch_idx + 1}!"
+                    f"WARNING: NaN/Inf loss detected at epoch {epoch + 1}, batch {batch_idx + 1}!"
                 )
                 print(
                     f"  y_pred stats: min={tf.reduce_min(y_pred)}, max={tf.reduce_max(y_pred)}, mean={tf.reduce_mean(y_pred)}"
@@ -112,13 +115,18 @@ def training_loop(
                 print(
                     f"  y_batch stats: min={tf.reduce_min(y_batch)}, max={tf.reduce_max(y_batch)}, mean={tf.reduce_mean(y_batch)}"
                 )
+                continue
 
             grads = tape.gradient(loss_value, model.trainable_weights)
 
-            # clip gradients to prevent exploding gradients
-            grads = [
-                tf.clip_by_norm(g, 1.0) if g is not None else g for g in grads
-            ]
+            # Global norm clipping: keeps all gradients proportional while
+            # bounding the total update magnitude (better than per-tensor clip
+            # when the ranking+weibull combination produces uneven gradient scales).
+            grads, _ = tf.clip_by_global_norm(
+                [g if g is not None else tf.zeros_like(w)
+                 for g, w in zip(grads, model.trainable_weights)],
+                1.0,
+            )
 
             if any(
                 tf.reduce_any(tf.math.is_nan(g)) for g in grads if g is not None

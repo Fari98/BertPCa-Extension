@@ -43,7 +43,7 @@ model:
   activation: "relu"
   norm_epsilon: 1.0e-5
   dropout: 0.2
-  gamma: 0.5   # ranking loss weight — helps concordance with rare CSM events
+  gamma: 0.1   # ranking loss weight — keep small relative to weibull; 0.6% event rate
 
 training:
   epochs: 200

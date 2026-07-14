@@ -166,11 +166,12 @@ def ranking_loss(y_true: tf.Tensor, y_pred: tf.Tensor) -> tf.Tensor:
     event  = tf.cast(y_true[:, 1], tf.float32)
     t_last = tf.cast(y_true[:, 2], tf.float32)
 
-    # Same guards as weibull_loss: tf.maximum prevents alpha/beta going
-    # negative (raw model output can be arbitrarily negative early in training,
-    # and x**non_integer for x<0 is NaN).
-    alpha = tf.maximum(y_pred[:, 0] + 1.0, EPSILON)
-    beta  = tf.maximum(y_pred[:, 1] + 1.0, EPSILON)
+    # Cast y_pred to float32 so all computations stay in one dtype.
+    # y_pred comes out of the model as float64 (input dtype=float64), but
+    # t/event/t_last above are float32.  Mixed-precision intermediate ops
+    # (float32 - float64 subtraction inside _log_S) can produce NaN gradients.
+    alpha = tf.maximum(tf.cast(y_pred[:, 0], tf.float32) + 1.0, EPSILON)
+    beta  = tf.maximum(tf.cast(y_pred[:, 1], tf.float32) + 1.0, EPSILON)
 
     def _log_S(t_val, a, b):
         # log-survival: -(t/a)^b in log-space to prevent float32 overflow
