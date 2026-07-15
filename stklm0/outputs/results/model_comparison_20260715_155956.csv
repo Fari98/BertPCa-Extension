@@ -1,0 +1,6 @@
+Model,Type,Mean C-index,Note,e=365d (mean p),e=1825d (mean p),e=3650d (mean p)
+Milan CSM (pre-trained),Weibull,0.7588,Harrell C on full cohort,0.5,0.8587,0.9176
+CoxPH,Baseline,-0.3333,IPCW weighted C-index on test split,-1.0,-1.0,1.0
+RSF,Baseline,-0.5,IPCW weighted C-index on test split,-1.0,-1.0,0.5
+DDH,Baseline,-0.6556,IPCW weighted C-index on test split,-1.0,-1.0,0.0333
+BertPCa STKLM0 (trained now),Weibull,-0.4667,IPCW weighted C-index on test split,-1.0,-1.0,0.6
