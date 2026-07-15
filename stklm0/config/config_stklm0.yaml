@@ -43,7 +43,7 @@ model:
   activation: "relu"
   norm_epsilon: 1.0e-5
   dropout: 0.2
-  gamma: 0.1   # ranking loss weight — keep small relative to weibull; 0.6% event rate
+  gamma: 0.0   # ranking loss disabled for CSM: 0.6% event rate causes NaN in epoch 3
 
 training:
   epochs: 200
