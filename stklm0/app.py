@@ -261,13 +261,16 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
 
     gamma = config.MODEL_CONFIG.get("gamma", 0.0)
     log(f"Training BertPCa … (this may take several minutes, gamma={gamma})")
+    import inspect as _inspect
+    _tl_kwargs = {"c_index_interval": 999}
+    if "gamma" in _inspect.signature(training_loop).parameters:
+        _tl_kwargs["gamma"] = gamma
     model, _ = training_loop(
         model, train_tf, val_tf,
         y_train=y_train, y_val=y_val,
         training_config=config.TRAINING_CONFIG,
         evaluation_config=config.EVALUATION_CONFIG,
-        c_index_interval=999,
-        gamma=gamma,
+        **_tl_kwargs,
     )
 
     log("Evaluating on test set …")
