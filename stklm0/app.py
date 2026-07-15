@@ -718,6 +718,8 @@ else:
                     index=[f"p={int(p)}d" for p in P_TIMES],
                     columns=[f"e={int(e)}d" for e in E_TIMES],
                 )
+                saved_bl = _save_c_matrix(mat, f"{name.lower()}_stklm0")
+                st.caption(f"Auto-saved to `{saved_bl}`")
                 _bundle[f"{name.lower()}_c_index.csv"] = bl_df.to_csv().encode()
         else:
             st.warning(f"{name}: failed (see log above).")
@@ -726,6 +728,13 @@ else:
     st.markdown("#### Model Comparison")
     cmp_df = _show_model_comparison(c_matrix, baseline_results, milan_results, df_raw)
     _bundle["model_comparison.csv"] = cmp_df.reset_index().to_csv(index=False).encode()
+
+    # Auto-save comparison table to disk
+    os.makedirs(_RESULTS_DIR, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    cmp_path = os.path.join(_RESULTS_DIR, f"model_comparison_{ts}.csv")
+    cmp_df.reset_index().to_csv(cmp_path, index=False)
+    st.caption(f"Comparison auto-saved to `{cmp_path}`")
 
 # ── Download all results (current session) ───────────────────────────────────
 if _bundle:
@@ -756,17 +765,21 @@ with st.expander("Download previously saved results", expanded=not bool(_bundle)
     saved_cindex = sorted(
         _glob.glob(os.path.join(_RESULTS_DIR, "c_index_*.csv")), reverse=True
     )
+    saved_comparisons = sorted(
+        _glob.glob(os.path.join(_RESULTS_DIR, "model_comparison_*.csv")), reverse=True
+    )
     saved_models = sorted(
         _glob.glob(os.path.join(_MODELS_DIR, "app_trained_*.keras")), reverse=True
     )
 
-    all_saved = saved_predictions + saved_cindex + saved_models
+    all_saved = saved_predictions + saved_cindex + saved_comparisons + saved_models
     if not all_saved:
         st.info("No previously saved results found.")
     else:
         st.caption(
             f"Found {len(saved_predictions)} prediction file(s), "
             f"{len(saved_cindex)} C-index file(s), "
+            f"{len(saved_comparisons)} comparison file(s), "
             f"{len(saved_models)} trained model(s)."
         )
 
@@ -790,7 +803,7 @@ with st.expander("Download previously saved results", expanded=not bool(_bundle)
         st.markdown("**Or download everything at once:**")
         buf2 = _io.BytesIO()
         with _zf2.ZipFile(buf2, "w", compression=_zf2.ZIP_DEFLATED) as zf2:
-            for path in saved_predictions + saved_cindex:
+            for path in saved_predictions + saved_cindex + saved_comparisons:
                 zf2.write(path, os.path.basename(path))
         buf2.seek(0)
         st.download_button(
