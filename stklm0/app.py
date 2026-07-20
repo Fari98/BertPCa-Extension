@@ -317,11 +317,14 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
 
     # Fallback save: runs if autosave_path wasn't supported by the installed
     # bertpca package (non-editable install on the URI machine).
+    # Use print() not log() — log() makes Streamlit widget calls that raise
+    # StopException when the browser has disconnected, killing the script
+    # before results are saved.
     if not os.path.exists(_model_path):
         model.save(_model_path)
-    log(f"Model saved to {_model_path}")
+    print(f"Model saved to {_model_path}")
 
-    log("Evaluating on test set …")
+    print("Evaluating on test set …")
     c_matrix = calculate_time_dependent_c_index(
         np.array(test_ds["features"]), y_train, y_test, model,
         p_times=np.array(P_TIMES, dtype=float),
@@ -330,9 +333,8 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
         return_mean=False,
     )
 
-    # Save C-index immediately for the same reason.
     _save_c_matrix(c_matrix, f"bertpca_stklm0_{_ts}")
-    log("C-index saved.")
+    print("C-index saved.")
 
     return model, c_matrix, train, val, test, static_cols, _model_path
 
