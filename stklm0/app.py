@@ -525,11 +525,10 @@ def _show_c_matrix_block(c_matrix: np.ndarray, label: str = "") -> pd.DataFrame:
     return df_c
 
 
-def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: dict, df_raw):
-    """Display a comparison table of all models."""
+def _compute_model_comparison(bertpca_mat, baseline_results: dict, milan_results: dict, df_raw) -> pd.DataFrame:
+    """Build comparison DataFrame without any Streamlit calls (crash-safe)."""
     rows = []
 
-    # Milan pre-trained models (Harrell's C on full cohort, per e_time)
     has_event = all(c in df_raw.columns for c in ["crmort", "t_end"])
     if has_event:
         for ok, res in milan_results.items():
@@ -546,7 +545,6 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
                 row[f"e={int(e)}d (mean p)"] = round(v, 4) if not np.isnan(v) else np.nan
             rows.append(row)
 
-    # Baselines (CoxPH, RSF, DDH)
     for name, mat in baseline_results.items():
         if mat is None:
             rows.append({
@@ -567,7 +565,6 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
                 row[f"e={int(e)}d (mean p)"] = round(float(np.nanmean(mat[:, j])), 4)
             rows.append(row)
 
-    # BertPCa (new)
     row = {
         "Model": "BertPCa STKLM0 (trained now)",
         "Type": "Weibull",
@@ -580,11 +577,14 @@ def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: d
 
     df_cmp = pd.DataFrame(rows).set_index("Model")
     numeric_cols = [c for c in df_cmp.columns if c.startswith("e=") or c == "Mean C-index"]
-
-    # Coerce all numeric columns to float (eliminates mixed str/float object columns
-    # that break pyarrow serialization in st.dataframe)
     for col in numeric_cols:
         df_cmp[col] = pd.to_numeric(df_cmp[col], errors="coerce")
+    return df_cmp
+
+
+def _show_model_comparison(bertpca_mat, baseline_results: dict, milan_results: dict, df_raw):
+    """Display a comparison table of all models."""
+    df_cmp = _compute_model_comparison(bertpca_mat, baseline_results, milan_results, df_raw)
 
     st.dataframe(df_cmp, width="stretch")
     st.caption(
@@ -727,6 +727,39 @@ else:
             st.exception(exc)
             st.stop()
 
+    # ── CRASH-SAFE: run baselines and save everything BEFORE any st.* call ──
+    # print() only — Streamlit's StopException cannot be raised here.
+    print("Running baselines (CoxPH, RSF, DDH) — crash-safe section ...")
+    try:
+        baseline_results = _run_baselines(
+            train_df, val_df, test_df, static_cols, log_fn=print
+        )
+        _bl_saved: dict[str, str] = {}
+        for _bl_name, _bl_mat in baseline_results.items():
+            if _bl_mat is not None:
+                _bl_path = _save_c_matrix(_bl_mat, f"{_bl_name.lower()}_stklm0")
+                _bl_saved[_bl_name] = _bl_path
+                print(f"  {_bl_name} C-index saved to {_bl_path}")
+            else:
+                print(f"  {_bl_name} failed.")
+        cmp_df = _compute_model_comparison(c_matrix, baseline_results, milan_results, df_raw)
+        os.makedirs(_RESULTS_DIR, exist_ok=True)
+        _cmp_ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        cmp_path = os.path.join(_RESULTS_DIR, f"model_comparison_{_cmp_ts}.csv")
+        cmp_df.reset_index().to_csv(cmp_path, index=False)
+        print(f"Comparison table saved to {cmp_path}")
+        _bl_error = None
+    except Exception as _bl_exc:
+        import traceback as _tb
+        _tb.print_exc()
+        print(f"Baselines/comparison failed: {_bl_exc}")
+        baseline_results = {}
+        _bl_saved = {}
+        cmp_df = None
+        cmp_path = None
+        _bl_error = str(_bl_exc)
+
+    # ── UI display (may fail if browser disconnected — files are already saved) ─
     log_box.empty()
     st.success("BertPCa training complete.")
 
@@ -751,20 +784,8 @@ else:
 
     # ── Baseline models ───────────────────────────────────────────────────
     st.markdown("#### Baseline Models — CoxPH · RSF · DDH")
-    baseline_log_box = st.empty()
-    baseline_log_lines: list[str] = []
-
-    def _blog(msg: str):
-        baseline_log_lines.append(msg)
-        baseline_log_box.info("  \n".join(baseline_log_lines))
-
-    with st.spinner("Running baselines (CoxPH, RSF, DDH) …"):
-        baseline_results = _run_baselines(
-            train_df, val_df, test_df, static_cols, log_fn=_blog
-        )
-
-    baseline_log_box.empty()
-
+    if _bl_error:
+        st.warning(f"Baselines failed: {_bl_error}")
     for name, mat in baseline_results.items():
         if mat is not None:
             with st.expander(f"{name} — C-index table", expanded=False):
@@ -774,23 +795,21 @@ else:
                     index=[f"p={int(p)}d" for p in P_TIMES],
                     columns=[f"e={int(e)}d" for e in E_TIMES],
                 )
-                saved_bl = _save_c_matrix(mat, f"{name.lower()}_stklm0")
-                st.caption(f"Auto-saved to `{saved_bl}`")
+                if name in _bl_saved:
+                    st.caption(f"Auto-saved to `{_bl_saved[name]}`")
                 _bundle[f"{name.lower()}_c_index.csv"] = bl_df.to_csv().encode()
         else:
-            st.warning(f"{name}: failed (see log above).")
+            st.warning(f"{name}: failed.")
 
     # ── Full model comparison ─────────────────────────────────────────────
     st.markdown("#### Model Comparison")
-    cmp_df = _show_model_comparison(c_matrix, baseline_results, milan_results, df_raw)
-    _bundle["model_comparison.csv"] = cmp_df.reset_index().to_csv(index=False).encode()
-
-    # Auto-save comparison table to disk
-    os.makedirs(_RESULTS_DIR, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    cmp_path = os.path.join(_RESULTS_DIR, f"model_comparison_{ts}.csv")
-    cmp_df.reset_index().to_csv(cmp_path, index=False)
-    st.caption(f"Comparison auto-saved to `{cmp_path}`")
+    if cmp_df is not None:
+        _show_model_comparison(c_matrix, baseline_results, milan_results, df_raw)
+        _bundle["model_comparison.csv"] = cmp_df.reset_index().to_csv(index=False).encode()
+        if cmp_path:
+            st.caption(f"Comparison auto-saved to `{cmp_path}`")
+    else:
+        st.warning("Comparison table not available (baselines failed).")
 
 # ── Download all results (current session) ───────────────────────────────────
 if _bundle:
