@@ -244,23 +244,44 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
         X_ev, y_ev = X_train[ev_mask], y_train_surv[ev_mask]
         X_ce, y_ce = X_train[~ev_mask], y_train_surv[~ev_mask]
         steps_per_epoch = int(np.ceil(len(X_train) / bs))
-        ds_ev = (tf.data.Dataset.from_tensor_slices((X_ev, y_ev))
-                 .shuffle(max(len(X_ev), 1)).repeat()
-                 .batch(n_ev_per_batch, drop_remainder=True))
-        ds_ce = (tf.data.Dataset.from_tensor_slices((X_ce, y_ce))
-                 .shuffle(max(len(X_ce), 1)).repeat()
-                 .batch(n_ce_per_batch, drop_remainder=True))
-        train_tf = (tf.data.Dataset.zip((ds_ev, ds_ce))
-                    .map(lambda e, c: (tf.concat([e[0], c[0]], axis=0),
-                                       tf.concat([e[1], c[1]], axis=0)))
-                    .take(steps_per_epoch))
-        log(f"Stratified batching: event rate {event_rate:.1%} → {n_ev_per_batch} events/batch")
+
+        # Pre-build all batches as numpy arrays to prevent TF dataset pipeline
+        # memory growth. The zip+map+take pattern accumulates TF graph nodes
+        # across epochs, causing step time to grow from ms to seconds by
+        # epoch 20. Converting to a static tensor dataset avoids this.
+        rng = np.random.default_rng()
+        Xb_list, yb_list = [], []
+        ev_idx = np.arange(len(X_ev)); rng.shuffle(ev_idx)
+        ce_idx = np.arange(len(X_ce)); rng.shuffle(ce_idx)
+        ev_pos = ce_pos = 0
+        for _ in range(steps_per_epoch):
+            if ev_pos + n_ev_per_batch > len(ev_idx):
+                rng.shuffle(ev_idx); ev_pos = 0
+            if ce_pos + n_ce_per_batch > len(ce_idx):
+                rng.shuffle(ce_idx); ce_pos = 0
+            ei = ev_idx[ev_pos:ev_pos + n_ev_per_batch]
+            ci = ce_idx[ce_pos:ce_pos + n_ce_per_batch]
+            Xb_list.append(np.concatenate([X_ev[ei], X_ce[ci]]))
+            yb_list.append(np.concatenate([y_ev[ei], y_ce[ci]]))
+            ev_pos += n_ev_per_batch; ce_pos += n_ce_per_batch
+
+        Xb = np.stack(Xb_list)  # (steps, batch_size, n_features, seq_len)
+        yb = np.stack(yb_list)  # (steps, batch_size, 3)
+        # reshuffle_each_iteration=True re-shuffles batch ORDER each time the
+        # dataset cycles (after training_loop's .repeat()), giving different
+        # epoch orderings without re-building the TF graph.
+        train_tf = (tf.data.Dataset
+                    .from_tensor_slices((Xb, yb))
+                    .shuffle(steps_per_epoch, reshuffle_each_iteration=True))
+        log(f"Stratified batching: event rate {event_rate:.1%} → "
+            f"{n_ev_per_batch} events/batch, {steps_per_epoch} steps/epoch")
     else:
+        steps_per_epoch = None
         train_tf = tf.data.Dataset.from_tensor_slices((X_train, y_train_surv)).shuffle(1024).batch(bs)
     val_tf = tf.data.Dataset.from_tensor_slices((X_val, y_val_surv)).batch(bs)
 
     gamma = config.MODEL_CONFIG.get("gamma", 0.0)
-    log(f"Training BertPCa … (this may take several minutes, gamma={gamma})")
+    log(f"Training BertPCa … (gamma={gamma})")
     import inspect as _inspect
     _tl_kwargs = {"c_index_interval": 999}
     if "gamma" in _inspect.signature(training_loop).parameters:
@@ -273,6 +294,14 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
         **_tl_kwargs,
     )
 
+    # Save model immediately — before any Streamlit calls — so it survives
+    # browser disconnects that happen after training completes.
+    os.makedirs(_MODELS_DIR, exist_ok=True)
+    _ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    _model_path = os.path.join(_MODELS_DIR, f"app_trained_stklm0_csm_{_ts}.keras")
+    model.save(_model_path)
+    log(f"Model saved to {_model_path}")
+
     log("Evaluating on test set …")
     c_matrix = calculate_time_dependent_c_index(
         np.array(test_ds["features"]), y_train, y_test, model,
@@ -281,7 +310,12 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
         t_max=config.EVALUATION_CONFIG["t_max"],
         return_mean=False,
     )
-    return model, c_matrix, train, val, test, static_cols
+
+    # Save C-index immediately for the same reason.
+    _save_c_matrix(c_matrix, f"bertpca_stklm0_{_ts}")
+    log("C-index saved.")
+
+    return model, c_matrix, train, val, test, static_cols, _model_path
 
 
 def _run_baselines(
@@ -663,8 +697,8 @@ else:
     # ── BertPCa training ──────────────────────────────────────────────────
     with st.spinner("Training BertPCa …"):
         try:
-            model, c_matrix, train_df, val_df, test_df, static_cols = _train_and_evaluate(
-                df_raw, log_fn=_log
+            model, c_matrix, train_df, val_df, test_df, static_cols, model_path = (
+                _train_and_evaluate(df_raw, log_fn=_log)
             )
         except Exception as exc:
             log_box.empty()
@@ -677,19 +711,17 @@ else:
 
     st.markdown("#### BertPCa — Time-dependent C-index")
     bertpca_df = _show_c_matrix_block(c_matrix, "BertPCa")
-    _save_c_matrix(c_matrix, "bertpca_stklm0")
+    # Model and C-index already saved inside _train_and_evaluate (crash-safe).
     _bundle["bertpca_c_index.csv"] = bertpca_df.to_csv().encode()
 
-    # Save & offer model download
-    model_path = os.path.join(_MODELS_DIR, "app_trained_stklm0_csm.keras")
-    os.makedirs(_MODELS_DIR, exist_ok=True)
-    model.save(model_path)
+    # Offer model download (already on disk)
     with open(model_path, "rb") as fh:
         model_bytes = fh.read()
+    st.caption(f"Model auto-saved to `{model_path}`")
     st.download_button(
         "Download trained BertPCa model (.keras)",
         model_bytes,
-        file_name="bertpca_stklm0_csm.keras",
+        file_name=os.path.basename(model_path),
         mime="application/octet-stream",
     )
 
