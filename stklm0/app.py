@@ -61,6 +61,14 @@ st.caption("Weibull survival model · STKLM0 patient schema")
 
 import tensorflow as tf  # noqa: E402
 
+gpus = tf.config.list_physical_devices("GPU")
+if gpus:
+    gpu_names = ", ".join(g.name for g in gpus)
+    st.success(f"GPU available: {gpu_names} · TF {tf.__version__}")
+else:
+    st.warning(f"No GPU detected — training will run on CPU (TF {tf.__version__}). "
+               "On Windows, TF ≥ 2.11 requires WSL2 for GPU support.")
+
 from bertpca.loss import weibull_loss  # noqa: E402
 
 _CUSTOM_OBJECTS = {"weibull_loss": weibull_loss}
