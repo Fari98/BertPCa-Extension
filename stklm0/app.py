@@ -61,13 +61,13 @@ st.caption("Weibull survival model · STKLM0 patient schema")
 
 import tensorflow as tf  # noqa: E402
 
+import sys as _sys
 gpus = tf.config.list_physical_devices("GPU")
 if gpus:
     gpu_names = ", ".join(g.name for g in gpus)
-    st.success(f"GPU available: {gpu_names} · TF {tf.__version__}")
+    st.success(f"GPU available: {gpu_names} · TF {tf.__version__} · {_sys.executable}")
 else:
-    st.warning(f"No GPU detected — training will run on CPU (TF {tf.__version__}). "
-               "On Windows, TF ≥ 2.11 requires WSL2 for GPU support.")
+    st.warning(f"No GPU detected — CPU only · TF {tf.__version__} · {_sys.executable}")
 
 from bertpca.loss import weibull_loss  # noqa: E402
 
@@ -308,6 +308,11 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
         evaluation_config=config.EVALUATION_CONFIG,
         **_tl_kwargs,
     )
+
+    # Fallback save: runs if autosave_path wasn't supported by the installed
+    # bertpca package (non-editable install on the URI machine).
+    if not os.path.exists(_model_path):
+        model.save(_model_path)
     log(f"Model saved to {_model_path}")
 
     log("Evaluating on test set …")
@@ -723,15 +728,18 @@ else:
     _bundle["bertpca_c_index.csv"] = bertpca_df.to_csv().encode()
 
     # Offer model download (already on disk)
-    with open(model_path, "rb") as fh:
-        model_bytes = fh.read()
     st.caption(f"Model auto-saved to `{model_path}`")
-    st.download_button(
-        "Download trained BertPCa model (.keras)",
-        model_bytes,
-        file_name=os.path.basename(model_path),
-        mime="application/octet-stream",
-    )
+    if os.path.exists(model_path):
+        with open(model_path, "rb") as fh:
+            model_bytes = fh.read()
+        st.download_button(
+            "Download trained BertPCa model (.keras)",
+            model_bytes,
+            file_name=os.path.basename(model_path),
+            mime="application/octet-stream",
+        )
+    else:
+        st.warning("Model file not found on disk — save may have failed.")
 
     # ── Baseline models ───────────────────────────────────────────────────
     st.markdown("#### Baseline Models — CoxPH · RSF · DDH")
