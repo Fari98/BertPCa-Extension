@@ -63,11 +63,17 @@ import tensorflow as tf  # noqa: E402
 
 import sys as _sys
 gpus = tf.config.list_physical_devices("GPU")
+_cuda_built = tf.test.is_built_with_cuda()
 if gpus:
     gpu_names = ", ".join(g.name for g in gpus)
     st.success(f"GPU available: {gpu_names} · TF {tf.__version__} · {_sys.executable}")
+elif _cuda_built:
+    st.warning(
+        f"TF built with CUDA but no GPU found — CUDA 11.2 runtime DLLs likely missing from PATH · "
+        f"TF {tf.__version__} · {_sys.executable}"
+    )
 else:
-    st.warning(f"No GPU detected — CPU only · TF {tf.__version__} · {_sys.executable}")
+    st.warning(f"CPU-only TF build · TF {tf.__version__} · {_sys.executable}")
 
 from bertpca.loss import weibull_loss  # noqa: E402
 
