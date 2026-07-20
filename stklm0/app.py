@@ -283,9 +283,16 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
     gamma = config.MODEL_CONFIG.get("gamma", 0.0)
     log(f"Training BertPCa … (gamma={gamma})")
     import inspect as _inspect
+
+    os.makedirs(_MODELS_DIR, exist_ok=True)
+    _ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    _model_path = os.path.join(_MODELS_DIR, f"app_trained_stklm0_csm_{_ts}.keras")
+
     _tl_kwargs = {"c_index_interval": 999}
     if "gamma" in _inspect.signature(training_loop).parameters:
         _tl_kwargs["gamma"] = gamma
+    if "autosave_path" in _inspect.signature(training_loop).parameters:
+        _tl_kwargs["autosave_path"] = _model_path
     model, _ = training_loop(
         model, train_tf, val_tf,
         y_train=y_train, y_val=y_val,
@@ -293,13 +300,6 @@ def _train_and_evaluate(df_raw: pd.DataFrame, log_fn=None):
         evaluation_config=config.EVALUATION_CONFIG,
         **_tl_kwargs,
     )
-
-    # Save model immediately — before any Streamlit calls — so it survives
-    # browser disconnects that happen after training completes.
-    os.makedirs(_MODELS_DIR, exist_ok=True)
-    _ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    _model_path = os.path.join(_MODELS_DIR, f"app_trained_stklm0_csm_{_ts}.keras")
-    model.save(_model_path)
     log(f"Model saved to {_model_path}")
 
     log("Evaluating on test set …")

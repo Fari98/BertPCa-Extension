@@ -22,6 +22,7 @@ def training_loop(
     evaluation_config=None,
     c_index_interval: int = 5,
     gamma: float = 0.0,
+    autosave_path: str = None,
 ):
     """
     Run the training loop: train and validate per epoch with early stopping
@@ -166,6 +167,12 @@ def training_loop(
             lr_patience_counter = 0
             best_weights = model.get_weights()
             print(f"  -> New best validation loss: {best_val_loss:.6f}")
+            if autosave_path:
+                try:
+                    model.save(autosave_path)
+                    print(f"  -> Auto-saved to {autosave_path}")
+                except Exception as _e:
+                    print(f"  -> Auto-save failed: {_e}")
         else:
             patience_counter += 1
             lr_patience_counter += 1
