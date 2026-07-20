@@ -59,6 +59,24 @@ st.set_page_config(
 st.title("BertPCa — Prostate Cancer Survival Prediction")
 st.caption("Weibull survival model · STKLM0 patient schema")
 
+# Add CUDA 11.2 runtime DLLs to PATH before TF is imported.
+# TF 2.10 on Windows needs cudart64_110.dll etc. in PATH at first import.
+# In a conda env, 'conda install cudatoolkit=11.2 cudnn=8.1' places them in
+# {env_root}/Library/bin — but Streamlit launched via 'streamlit run' often
+# does not inherit the full conda activation PATH.
+if sys.platform == "win32":
+    _env_root = os.path.dirname(sys.executable)
+    _cuda_candidates = [
+        os.path.join(_env_root, "Library", "bin"),
+        r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v11.2\bin",
+        r"C:\Program Files\NVIDIA\CUDA\v11.2\bin",
+    ]
+    _path_now = os.environ.get("PATH", "")
+    for _cd in _cuda_candidates:
+        if os.path.isdir(_cd) and _cd not in _path_now:
+            os.environ["PATH"] = _cd + os.pathsep + _path_now
+            _path_now = os.environ["PATH"]
+
 import tensorflow as tf  # noqa: E402
 
 import sys as _sys
@@ -68,10 +86,24 @@ if gpus:
     gpu_names = ", ".join(g.name for g in gpus)
     st.success(f"GPU available: {gpu_names} · TF {tf.__version__} · {_sys.executable}")
 elif _cuda_built:
-    st.warning(
-        f"TF built with CUDA but no GPU found — CUDA 11.2 runtime DLLs likely missing from PATH · "
-        f"TF {tf.__version__} · {_sys.executable}"
+    _env_root_disp = os.path.dirname(_sys.executable)
+    _lib_bin = os.path.join(_env_root_disp, "Library", "bin")
+    _has_cudart = any(
+        os.path.exists(os.path.join(_lib_bin, dll))
+        for dll in ("cudart64_110.dll", "cudart64_112.dll")
     )
+    if _has_cudart:
+        st.warning(
+            f"TF built with CUDA · CUDA DLLs found in Library\\bin but GPU still not detected. "
+            f"Try restarting the Streamlit server (Ctrl-C and re-run). "
+            f"TF {tf.__version__} · {_sys.executable}"
+        )
+    else:
+        st.warning(
+            f"TF built with CUDA but no GPU found — cudatoolkit=11.2 DLLs not found in "
+            f"`{_lib_bin}`. Run: conda install -c conda-forge cudatoolkit=11.2 cudnn=8.1 "
+            f"· TF {tf.__version__} · {_sys.executable}"
+        )
 else:
     st.warning(f"CPU-only TF build · TF {tf.__version__} · {_sys.executable}")
 
