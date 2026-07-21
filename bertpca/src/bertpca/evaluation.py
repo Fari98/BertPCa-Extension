@@ -106,8 +106,11 @@ def calculate_time_dependent_c_index(
         beta = y_pred[:, 1] + 1
 
         for j, e_time in enumerate(e_times_scaled):
-            # Weibull hazard at scaled e_time (model trained on scaled time)
-            risks = (beta / alpha) * (((e_time) / alpha) ** (beta - 1))
+            # Hazard at residual horizon (e_time - p_time), consistent with
+            # weibull_loss which trains on t_new = tte - t_last ≈ tte - p_time.
+            # Using absolute e_time instead caused ranking inversions (C < 0.5).
+            residual = tf.maximum(tf.cast(e_time - p_time, tf.float32), epsilon)
+            risks = (beta / alpha) * ((residual / alpha) ** (beta - 1))
 
             # Residual survival times (all scaled)
             train_times = y_train_cols[train_time_mask, 1] - p_time
