@@ -4,13 +4,16 @@ End-to-end BertPCa pipeline for functional outcomes (EF and UC).
 
   Stage 1: Feature-expanded dataset preparation (runs prepare_dataset_uri.py)
   Stage 2: Boruta feature selection (always re-run — no cache)
-  Stage 3: Full training + C-index evaluation (uses YAML hyperparameters)
+  Stage 3: Optuna HPT (30-epoch proxy, skipped if --skip-hpt or cache exists)
+  Stage 4: Full training + C-index evaluation (uses best HPT params)
 
 Usage (from repo root):
   python functional_outcomes/scripts/run_pipeline.py
   python functional_outcomes/scripts/run_pipeline.py --outcome uc
   python functional_outcomes/scripts/run_pipeline.py --outcome ef --force-train
-  python functional_outcomes/scripts/run_pipeline.py --force   # re-run everything
+  python functional_outcomes/scripts/run_pipeline.py --force        # re-run everything
+  python functional_outcomes/scripts/run_pipeline.py --skip-hpt     # Boruta → train only
+  python functional_outcomes/scripts/run_pipeline.py --n-trials 50  # HPT trials per outcome
 """
 
 import os
@@ -183,26 +186,120 @@ def stage_2_boruta(outcome: str, random_state: int, max_iter: int,
 
 
 # ---------------------------------------------------------------------------
-# Stage 3 — Full training and evaluation
+# Stage 3 — Optuna HPT
 # ---------------------------------------------------------------------------
 
-def stage_3_train(outcome: str, selected_features: list) -> None:
+_HPT_MODEL_KEYS = {
+    "learning_rate", "dropout", "gamma", "num_encoder_layers", "intermediate_dim",
+    "num_heads", "num_conv_blocks", "filters", "kernel_size", "num_dense_layers",
+    "dense_units",
+}
+
+
+def stage_3_hpt(outcome: str, selected_features: list,
+                n_trials: int, random_state: int,
+                storage: str = None, force: bool = False) -> dict:
+    """Run Optuna HPT and return best params dict (empty if skipped/failed)."""
+    out_path = os.path.join(_OUTPUT_DIR, f"hpt_best_{outcome}.json")
+
+    if not force and os.path.exists(out_path):
+        with open(out_path) as f:
+            cached = json.load(f)
+        cached_feats = set(cached.get("_features", []))
+        if cached_feats == set(selected_features):
+            print(f"[Stage 3/{outcome.upper()}] HPT cache found — skipping "
+                  f"(use --force-hpt to re-run).")
+            return cached.get("params", {})
+        print(f"[Stage 3/{outcome.upper()}] HPT cache exists but features changed "
+              f"— re-running HPT.")
+
+    try:
+        import optuna
+        from tune_functional import _run_trial
+    except ImportError as e:
+        print(f"[Stage 3/{outcome.upper()}] Optuna not installed ({e}) — skipping HPT.")
+        return {}
+
+    config = _make_config(outcome, selected_features)
+    set_seeds(random_state)
+
+    print(f"[Stage 3/{outcome.upper()}] Loading data for HPT ...")
+    train_ds, val_ds, _, _, _, _ = load_and_preprocess_data(
+        config.TRAIN_PATH, config.VAL_PATH, config.TEST_PATH,
+        config.STATIC_FEATURES, config.DYNAMIC_FEATURES,
+        config.SEQ_LENGTH, config.BATCH_SIZE, config.T_MAX,
+        config.AUGMENT_DATA, config.SCALE_FEATURES,
+    )
+    n_features = len(config.STATIC_FEATURES) + len(config.DYNAMIC_FEATURES)
+
+    study_name = f"bertpca_{outcome}_pipeline_hpt"
+    pruner = optuna.pruners.MedianPruner(n_startup_trials=3, n_warmup_steps=5)
+    study = optuna.create_study(
+        direction="minimize",
+        study_name=study_name,
+        storage=storage,
+        load_if_exists=True,
+        pruner=pruner,
+    )
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+    print(f"[Stage 3/{outcome.upper()}] Running {n_trials} HPT trials ...")
+    study.optimize(
+        lambda trial: _run_trial(trial, train_ds, val_ds, config, n_features),
+        n_trials=n_trials,
+        catch=(Exception,),
+    )
+
+    completed = [t for t in study.trials if t.value is not None]
+    if not completed:
+        print(f"[Stage 3/{outcome.upper()}] All HPT trials failed — using YAML defaults.")
+        return {}
+
+    best = study.best_trial
+    print(f"[Stage 3/{outcome.upper()}] Best val NLL: {best.value:.6f}")
+    print(f"  Best params: {best.params}")
+
+    os.makedirs(_OUTPUT_DIR, exist_ok=True)
+    with open(out_path, "w") as f:
+        json.dump({"params": best.params, "_features": selected_features,
+                   "best_val_nll": best.value}, f, indent=2)
+    print(f"  Saved to {out_path}")
+    return best.params
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 — Full training and evaluation
+# ---------------------------------------------------------------------------
+
+def stage_4_train(outcome: str, selected_features: list,
+                  best_params: dict = None) -> None:
     os.makedirs(os.path.join(_OUTPUT_DIR, "models"), exist_ok=True)
     model_path = os.path.join(_OUTPUT_DIR, "models", f"pipeline_model_{outcome}.keras")
 
     config = _make_config(outcome, selected_features)
-
     config.RESULTS_DIR = os.path.join(config.RESULTS_DIR, "pipeline")
     os.makedirs(config.RESULTS_DIR, exist_ok=True)
     os.makedirs(config.MODEL_DIR,   exist_ok=True)
 
-    print(f"[Stage 3/{outcome.upper()}] Training with {len(selected_features)} features ...")
+    # Apply HPT best params (model keys → MODEL_CONFIG, batch_size → BATCH_SIZE)
+    if best_params:
+        for k, v in best_params.items():
+            if k in _HPT_MODEL_KEYS:
+                config.MODEL_CONFIG[k] = v
+            elif k == "batch_size":
+                config.BATCH_SIZE = v
+                config.TRAINING_CONFIG["batch_size"] = v
+        print(f"[Stage 4/{outcome.upper()}] Applying HPT params: {best_params}")
+    else:
+        print(f"[Stage 4/{outcome.upper()}] No HPT params — using YAML defaults.")
+
+    print(f"[Stage 4/{outcome.upper()}] Training with {len(selected_features)} features ...")
     print(f"  Static:    {selected_features}")
     print(f"  Model cfg: {config.MODEL_CONFIG}")
     print(f"  Batch sz:  {config.BATCH_SIZE}")
 
     train_model(config, output_path=model_path)
-    print(f"[Stage 3/{outcome.upper()}] Model saved to {model_path}")
+    print(f"[Stage 4/{outcome.upper()}] Model saved to {model_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -211,18 +308,28 @@ def stage_3_train(outcome: str, selected_features: list) -> None:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="BertPCa pipeline: dataset → Boruta → training (no Optuna)"
+        description="BertPCa pipeline: dataset → Boruta → HPT → training"
     )
     parser.add_argument("--outcome", choices=["ef", "uc", "all"], default="ef")
-    parser.add_argument("--force",            action="store_true", help="Re-run all stages")
-    parser.add_argument("--force-prepare",    action="store_true")
+    parser.add_argument("--force",             action="store_true", help="Re-run all stages")
+    parser.add_argument("--force-prepare",     action="store_true")
+    parser.add_argument("--force-hpt",         action="store_true")
+    parser.add_argument("--force-train",       action="store_true")
+    parser.add_argument("--skip-hpt",          action="store_true",
+                        help="Skip Optuna HPT and train with YAML defaults")
+    parser.add_argument("--n-trials",          type=int, default=50,
+                        help="Optuna trials per outcome (default: 50)")
+    parser.add_argument("--storage",           type=str, default=None,
+                        help="Optuna storage URL, e.g. sqlite:///pipeline.db")
     parser.add_argument("--include-tentative", action="store_true",
                         help="Include Boruta tentative features alongside confirmed ones")
-    parser.add_argument("--boruta-max-iter",  type=int, default=100)
-    parser.add_argument("--random-state",     type=int, default=42)
+    parser.add_argument("--boruta-max-iter",   type=int, default=100)
+    parser.add_argument("--random-state",      type=int, default=42)
     args = parser.parse_args()
 
     force_prepare = args.force_prepare or args.force
+    force_hpt     = args.force_hpt     or args.force
+    force_train   = args.force_train   or args.force
     outcomes = ["ef", "uc"] if args.outcome == "all" else [args.outcome]
 
     print(f"\n{SEP}\n  STAGE 1 — Dataset Preparation\n{SEP}")
@@ -239,8 +346,19 @@ def main():
             include_tentative=args.include_tentative,
         )
 
-        print(f"\n--- Stage 3: Full Training ({outcome.upper()}) ---")
-        stage_3_train(outcome, selected)
+        best_params = {}
+        if not args.skip_hpt:
+            print(f"\n--- Stage 3: Optuna HPT ({outcome.upper()}) ---")
+            best_params = stage_3_hpt(
+                outcome, selected,
+                n_trials=args.n_trials,
+                random_state=args.random_state,
+                storage=args.storage,
+                force=force_hpt,
+            )
+
+        print(f"\n--- Stage 4: Full Training ({outcome.upper()}) ---")
+        stage_4_train(outcome, selected, best_params=best_params)
 
     print(f"\n{SEP}")
     print(f"  Pipeline complete: {', '.join(o.upper() for o in outcomes)}")
