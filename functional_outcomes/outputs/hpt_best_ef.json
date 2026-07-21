@@ -1,27 +1,28 @@
 {
-  "outcome": "ef",
-  "static_features": [
-    "nerve_sparing",
-    "IIEF_EFdomain_pre",
-    "age",
-    "tpsa",
-    "pathgg_group",
-    "pstage"
-  ],
-  "n_trials": 50,
-  "best_val_nll": -5.014166184834072,
   "params": {
     "learning_rate": 5e-05,
     "batch_size": 32,
     "dropout": 0.1,
-    "gamma": 0.5,
-    "num_encoder_layers": 1,
-    "intermediate_dim": 64,
+    "gamma": 0.1,
+    "num_encoder_layers": 2,
+    "intermediate_dim": 128,
     "num_heads": 2,
-    "num_conv_blocks": 2,
-    "filters": 128,
-    "kernel_size": 3,
+    "num_conv_blocks": 3,
+    "filters": 64,
+    "kernel_size": 5,
     "num_dense_layers": 2,
     "dense_units": 256
-  }
+  },
+  "_features": [
+    "nerve_sparing",
+    "IIEF_EFdomain_pre",
+    "age",
+    "tpsa",
+    "bmi",
+    "pathgg_group",
+    "ece_bin",
+    "pstage",
+    "time_to_nadir"
+  ],
+  "best_val_nll": -7.850473509894477
 }
