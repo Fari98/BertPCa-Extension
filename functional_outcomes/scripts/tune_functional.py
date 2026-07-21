@@ -108,12 +108,19 @@ def _run_trial(trial, train_ds, val_ds, config, n_features: int) -> float:
     val_tf = tf.data.Dataset.from_tensor_slices((X_val, y_val)).batch(batch_size)
 
     # Short epochs for HPT — just enough to detect if a config is promising
-    max_epochs       = 30
-    patience         = 6
+    max_epochs       = 15
+    patience         = 4
     reduce_lr_wait   = 3
     reduce_lr_factor = 0.5
     min_lr           = 1e-7
     clip_norm        = 0.5   # tighter than default 1.0 to reduce NaN collapse
+
+    print(
+        f"  [T{trial.number}] lr={learning_rate} bs={batch_size} "
+        f"gamma={gamma} enc={num_encoder_layers} heads={num_heads} "
+        f"drop={dropout}",
+        flush=True,
+    )
 
     best_val_nll = float("inf")
     patience_ctr = lr_patience_ctr = 0
@@ -151,17 +158,17 @@ def _run_trial(trial, train_ds, val_ds, config, n_features: int) -> float:
                 val_nll_list.append(val_nll)
 
         if not val_nll_list:
-            # Entire val epoch NaN
             nan_epoch_ctr += 1
             patience_ctr   += 1
             lr_patience_ctr += 1
+            print(f"  [T{trial.number}] ep {epoch+1:02d}/{max_epochs} val=NaN ({nan_epoch_ctr}/3)", flush=True)
             if nan_epoch_ctr >= 3:
-                # Collapsed — prune this trial early
                 raise optuna.exceptions.TrialPruned()
             continue
 
         nan_epoch_ctr = 0
         avg_val_nll = float(np.mean(val_nll_list))
+        marker = " *" if avg_val_nll < best_val_nll else ""
 
         if avg_val_nll < best_val_nll:
             best_val_nll = avg_val_nll
@@ -177,16 +184,30 @@ def _run_trial(trial, train_ds, val_ds, config, n_features: int) -> float:
             new_lr = max(current_lr * reduce_lr_factor, min_lr)
             optimizer.learning_rate.assign(new_lr)
             lr_patience_ctr = 0
+            print(
+                f"  [T{trial.number}] ep {epoch+1:02d}/{max_epochs} "
+                f"val={avg_val_nll:.4f}  LR→{new_lr:.2e}  pat={patience_ctr}/{patience}{marker}",
+                flush=True,
+            )
+        else:
+            print(
+                f"  [T{trial.number}] ep {epoch+1:02d}/{max_epochs} "
+                f"val={avg_val_nll:.4f}  pat={patience_ctr}/{patience}{marker}",
+                flush=True,
+            )
 
         # Early stopping
         if patience_ctr >= patience:
+            print(f"  [T{trial.number}] early stop at ep {epoch+1}", flush=True)
             break
 
         # Optuna intermediate reporting for early pruning
         trial.report(avg_val_nll, epoch)
         if trial.should_prune():
+            print(f"  [T{trial.number}] pruned at ep {epoch+1}", flush=True)
             raise optuna.exceptions.TrialPruned()
 
+    print(f"  [T{trial.number}] done — best val NLL={best_val_nll:.4f}", flush=True)
     return best_val_nll if best_val_nll < float("inf") else 1e6
 
 
