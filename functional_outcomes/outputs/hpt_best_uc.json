@@ -2,16 +2,16 @@
   "params": {
     "learning_rate": 5e-05,
     "batch_size": 64,
-    "dropout": 0.4,
-    "gamma": 0.3,
+    "dropout": 0.1,
+    "gamma": 0.1,
     "num_encoder_layers": 1,
-    "intermediate_dim": 128,
+    "intermediate_dim": 64,
     "num_heads": 4,
     "num_conv_blocks": 2,
     "filters": 64,
     "kernel_size": 5,
-    "num_dense_layers": 2,
-    "dense_units": 256
+    "num_dense_layers": 3,
+    "dense_units": 128
   },
   "_features": [
     "nerve_sparing",
@@ -33,5 +33,5 @@
     "psa_slope",
     "n_psa_obs"
   ],
-  "best_val_nll": -4.05900764465332
+  "best_val_nll": -4.065968871116638
 }
