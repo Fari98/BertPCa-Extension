@@ -129,7 +129,10 @@ def calculate_time_dependent_c_index(
             )
 
     
-    return np.mean(c_index) if return_mean else c_index
+    if return_mean:
+        valid = np.where(c_index == -1.0, np.nan, c_index)
+        return float(np.nanmean(valid))
+    return c_index
 
 
 def _normalize_labels(y: Union[np.ndarray, np.recarray]) -> np.recarray:

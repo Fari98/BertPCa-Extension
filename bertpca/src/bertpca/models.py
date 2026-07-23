@@ -161,17 +161,22 @@ def build_bert_pca(
         x = layers.Dropout(dropout, name=f"dropout_{i}")(x)
 
     # --- Output Weibull Parameters ---
+    # MaxNorm constraint caps weight L2-norm so ELU outputs stay bounded and
+    # don't drive alpha/beta to infinity, which kills gradients via loss clipping.
+    _out_constraint = keras.constraints.MaxNorm(max_value=2.0)
     alpha = keras.layers.Dense(
         1,
         activation='elu',
         name="alpha",
-        use_bias=False
+        use_bias=False,
+        kernel_constraint=_out_constraint,
     )(x)
     beta = keras.layers.Dense(
         1,
         activation='elu',
         name="beta",
-        use_bias=False
+        use_bias=False,
+        kernel_constraint=_out_constraint,
     )(x)
     output = keras.layers.Concatenate(name="weibull_params")([alpha, beta])
 

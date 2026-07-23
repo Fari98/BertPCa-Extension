@@ -60,18 +60,31 @@ def training_loop(
     optimizer = model.optimizer
     loss_fn = model.loss
     history = {"loss": [], "val_loss": []}
-    best_val_loss = float("inf")
-    patience_counter = 0
-    lr_patience_counter = 0
-    best_weights = None
-    epochs = training_config["epochs"]
+
+    epochs       = training_config["epochs"]
+    es_patience  = training_config["early_stopping_patience"]
+    lr_patience  = training_config["reduce_lr_patience"]
+    lr_factor    = training_config["reduce_lr_factor"]
+    min_lr       = training_config["min_lr"]
+
+    # C-index patience: number of C-index evaluations without improvement.
+    # Keeps total wait comparable to es_patience epochs.
+    cindex_patience_limit = max(2, es_patience // c_index_interval)
+
+    best_val_loss   = float("inf")
+    best_val_cindex = -float("inf")
+    best_weights    = None
+    cindex_ever     = False   # True once the first C-index has been computed
+
+    lr_patience_ctr    = 0
+    nll_patience_ctr   = 0   # fallback early-stop when C-index unavailable
+    cindex_patience_ctr = 0
 
     steps_per_epoch = train_dataset.cardinality().numpy()
-    steps_per_val = val_dataset.cardinality().numpy()
+    steps_per_val   = val_dataset.cardinality().numpy()
 
-    # repeat datasets to avoid "end of dataset" error
     train_dataset = train_dataset.repeat()
-    val_dataset = val_dataset.repeat()
+    val_dataset   = val_dataset.repeat()
 
     compute_c_index = (
         y_train is not None
@@ -161,41 +174,37 @@ def training_loop(
             f"Mean Train Loss: {avg_train_loss:.6f}, Mean Val Loss: {avg_val_loss:.6f}"
         )
 
+        # --- LR scheduler (always on NLL) ---
         if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            patience_counter = 0
-            lr_patience_counter = 0
-            best_weights = model.get_weights()
-            print(f"  -> New best validation loss: {best_val_loss:.6f}")
-            if autosave_path:
-                try:
-                    model.save(autosave_path)
-                    print(f"  -> Auto-saved to {autosave_path}")
-                except Exception as _e:
-                    print(f"  -> Auto-save failed: {_e}")
+            best_val_loss   = avg_val_loss
+            lr_patience_ctr = 0
+            nll_patience_ctr = 0
+            # Before any C-index is computed, best weights = best NLL
+            if not cindex_ever:
+                best_weights = model.get_weights()
+                print(f"  -> New best val NLL: {best_val_loss:.6f}")
+                if autosave_path:
+                    try:
+                        model.save(autosave_path)
+                    except Exception as _e:
+                        print(f"  -> Auto-save failed: {_e}")
         else:
-            patience_counter += 1
-            lr_patience_counter += 1
-            if lr_patience_counter >= training_config["reduce_lr_patience"]:
+            lr_patience_ctr  += 1
+            nll_patience_ctr += 1
+            if lr_patience_ctr >= lr_patience:
                 old_lr = float(optimizer.learning_rate)
-                new_lr = old_lr * training_config["reduce_lr_factor"]
-                new_lr = max(new_lr, training_config["min_lr"])
+                new_lr = max(old_lr * lr_factor, min_lr)
                 optimizer.learning_rate.assign(new_lr)
-                print(
-                    f"  -> Reducing learning rate: {old_lr:.2e} -> {new_lr:.2e}"
-                )
-                lr_patience_counter = 0
-            if patience_counter >= training_config["early_stopping_patience"]:
-                print(
-                    f"  -> Early stopping triggered (patience: {training_config['early_stopping_patience']})"
-                )
-                break
+                print(f"  -> Reducing learning rate: {old_lr:.2e} -> {new_lr:.2e}")
+                lr_patience_ctr = 0
 
-        # time-dependent C-index on validation set
-        if (
-            compute_c_index
-            and (epoch + 1) % c_index_interval == 0
-        ):
+        # NLL early-stop: used only when C-index is never available
+        if not compute_c_index and nll_patience_ctr >= es_patience:
+            print(f"  -> Early stopping (NLL, patience={es_patience})")
+            break
+
+        # --- Val C-index: model selection + early stopping ---
+        if compute_c_index and (epoch + 1) % c_index_interval == 0:
             try:
                 c_index_val = calculate_time_dependent_c_index(
                     np.asarray(val_features),
@@ -207,12 +216,33 @@ def training_loop(
                     t_max=evaluation_config["t_max"],
                     return_mean=True,
                 )
+                cindex_ever = True
+                print(f"Val C-index @ ep {epoch + 1}: {c_index_val:.4f}")
 
-                print(
-                    f"Mean time-dependent C-index on validation set at epoch {epoch + 1}: {c_index_val:.6f}"
-                )
-            except Exception:
-                pass
+                if c_index_val > best_val_cindex:
+                    best_val_cindex     = c_index_val
+                    cindex_patience_ctr = 0
+                    best_weights        = model.get_weights()
+                    print(f"  -> New best val C-index: {best_val_cindex:.4f}")
+                    if autosave_path:
+                        try:
+                            model.save(autosave_path)
+                        except Exception as _e:
+                            print(f"  -> Auto-save failed: {_e}")
+                else:
+                    cindex_patience_ctr += 1
+                    print(
+                        f"  -> C-index patience: {cindex_patience_ctr}/{cindex_patience_limit}"
+                    )
+                    if cindex_patience_ctr >= cindex_patience_limit:
+                        print(
+                            f"  -> Early stopping (C-index, "
+                            f"{cindex_patience_limit} evals ≈ "
+                            f"{cindex_patience_limit * c_index_interval} epochs)"
+                        )
+                        break
+            except Exception as _ce:
+                print(f"  -> C-index eval failed: {_ce}")
 
     if best_weights is not None:
         print("Restoring best weights...")
