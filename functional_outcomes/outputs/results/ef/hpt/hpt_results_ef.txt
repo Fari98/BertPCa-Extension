@@ -1,0 +1,40 @@
+HPT results — EF
+============================================================
+Finished trials: 50
+Best val NLL:    -4.750369
+
+Best params:
+  learning_rate: 5e-05
+  batch_size: 16
+  dropout: 0.2
+  gamma: 0.0
+  num_encoder_layers: 2
+  intermediate_dim: 256
+  num_heads: 4
+  num_conv_blocks: 2
+  filters: 64
+  kernel_size: 5
+  num_dense_layers: 3
+  dense_units: 128
+
+All completed trials (sorted by value):
+  Trial   6: val_nll=-4.750369  {'learning_rate': 5e-05, 'batch_size': 16, 'dropout': 0.2, 'gamma': 0.0, 'num_encoder_layers': 2, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 5, 'num_dense_layers': 3, 'dense_units': 128}
+  Trial   4: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.001, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  12: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  21: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  22: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  23: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  24: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  25: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  31: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  32: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  33: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  41: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  42: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  43: val_nll=-4.524462  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  40: val_nll=-4.503847  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.3, 'gamma': 0.01, 'num_encoder_layers': 2, 'intermediate_dim': 64, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 128, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  14: val_nll=-4.485821  {'learning_rate': 1e-05, 'batch_size': 16, 'dropout': 0.2, 'gamma': 0.001, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  13: val_nll=-4.475993  {'learning_rate': 5e-05, 'batch_size': 16, 'dropout': 0.2, 'gamma': 0.0, 'num_encoder_layers': 2, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 3, 'dense_units': 128}
+  Trial  18: val_nll=-4.441055  {'learning_rate': 5e-05, 'batch_size': 16, 'dropout': 0.3, 'gamma': 0.0, 'num_encoder_layers': 2, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 2, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 3, 'dense_units': 256}
+  Trial  20: val_nll=-4.440777  {'learning_rate': 5e-05, 'batch_size': 16, 'dropout': 0.2, 'gamma': 0.0, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 64, 'kernel_size': 5, 'num_dense_layers': 3, 'dense_units': 256}
+  Trial  30: val_nll=-4.436188  {'learning_rate': 5e-05, 'batch_size': 32, 'dropout': 0.2, 'gamma': 0.001, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 4, 'num_conv_blocks': 2, 'filters': 64, 'kernel_size': 3, 'num_dense_layers': 2, 'dense_units': 256}

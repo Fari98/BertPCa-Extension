@@ -1,0 +1,40 @@
+HPT results — UC
+============================================================
+Finished trials: 50
+Best val NLL:    -12.809392
+
+Best params:
+  learning_rate: 5e-05
+  batch_size: 64
+  dropout: 0.1
+  gamma: 0.1
+  num_encoder_layers: 1
+  intermediate_dim: 256
+  num_heads: 2
+  num_conv_blocks: 3
+  filters: 128
+  kernel_size: 5
+  num_dense_layers: 2
+  dense_units: 256
+
+All completed trials (sorted by value):
+  Trial  19: val_nll=-12.809392  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.1, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  29: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  30: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  31: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  32: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  33: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  34: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  41: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  42: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  43: val_nll=-12.587545  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.2, 'gamma': 0.01, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 4, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 128}
+  Trial  20: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  21: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  22: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  23: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  24: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  25: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  27: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  28: val_nll=-12.299371  {'learning_rate': 5e-05, 'batch_size': 64, 'dropout': 0.4, 'gamma': 0.0, 'num_encoder_layers': 1, 'intermediate_dim': 128, 'num_heads': 2, 'num_conv_blocks': 3, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  15: val_nll=-11.725072  {'learning_rate': 5e-05, 'batch_size': 32, 'dropout': 0.1, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 2, 'num_conv_blocks': 2, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
+  Trial  17: val_nll=-11.725072  {'learning_rate': 5e-05, 'batch_size': 32, 'dropout': 0.1, 'gamma': 0.1, 'num_encoder_layers': 1, 'intermediate_dim': 256, 'num_heads': 2, 'num_conv_blocks': 2, 'filters': 128, 'kernel_size': 5, 'num_dense_layers': 2, 'dense_units': 256}
