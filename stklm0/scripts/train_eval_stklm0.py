@@ -128,10 +128,7 @@ def run(output_path: str = None):
         print("Training on STKLM0 ...")
         model, history = training_loop(
             model, train_tf, val_tf,
-            y_train=y_train_struct, y_val=y_val_struct,
             training_config=config.TRAINING_CONFIG,
-            evaluation_config=config.EVALUATION_CONFIG,
-            c_index_interval=5,
         )
         print("Training complete.")
 

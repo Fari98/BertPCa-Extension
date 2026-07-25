@@ -41,16 +41,16 @@ scale_features: true
 
 model:
   learning_rate: 5.0e-5
-  num_encoder_layers: 2
-  intermediate_dim: 128
-  num_heads: 4
+  num_encoder_layers: 1
+  intermediate_dim: 64
+  num_heads: 2
   num_conv_blocks: 1
-  filters: 64
+  filters: 32
   kernel_size: 3
   pool_strides: 2
   pool_size: 3
-  num_dense_layers: 3
-  dense_units: 128
+  num_dense_layers: 1
+  dense_units: 64
   activation: "relu"
   norm_epsilon: 1.0e-5
   dropout: 0.3
