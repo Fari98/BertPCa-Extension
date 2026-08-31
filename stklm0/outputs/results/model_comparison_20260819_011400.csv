@@ -1,0 +1,5 @@
+Method,Type,Mean C-index,e=1y,e=5y,e=10y
+CoxPH,Baseline,0.8607,0.8563,0.8899,0.8358
+RSF,Baseline,0.8685,0.9141,0.8657,0.8256
+DDH,Baseline,0.4042,,0.5953,0.2131
+BertPCa (app_trained_stklm0_csm_20260730_185603.keras),Weibull,0.8878,,0.9225,0.853
