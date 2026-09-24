@@ -106,9 +106,17 @@ with st.sidebar:
 
     st.divider()
     st.header("Baselines")
-    run_coxph = st.checkbox("CoxPH", value=True)
-    run_rsf   = st.checkbox("RSF",   value=True)
-    run_ddh   = st.checkbox("DDH",   value=True)
+    run_coxph  = st.checkbox("CoxPH",   value=True)
+    run_rsf    = st.checkbox("RSF",     value=True)
+    run_ddh    = st.checkbox("DDH",     value=True)
+    st.divider()
+    st.header("Nomograms")
+    run_capras = st.checkbox("CAPRA-S", value=True,
+                             help="Post-surgical nomogram (Cooperberg 2011). "
+                                  "Uses d_spsa, isup_gealson, pT_ord, pR_bin, pN_bin.")
+    run_mskcc  = st.checkbox("MSKCC",   value=True,
+                             help="MSKCC BCR nomogram (Stephenson 2005) approximated from "
+                                  "STKLM0 features. Originally a BCR tool — applied here to CSM.")
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +287,108 @@ progress.progress(50, text="BertPCa done.")
 baseline_results: dict = {}
 train_val_df = pd.concat([train_df, val_df])
 
+# ---------------------------------------------------------------------------
+# Nomogram helpers (CAPRA-S and MSKCC from STKLM0 static features)
+# ---------------------------------------------------------------------------
+
+def _capras_score(df_s: pd.DataFrame) -> np.ndarray:
+    """CAPRA-S score from STKLM0 features.
+
+    pT_ord is used as a proxy for ECE (>=1) and SVI (>=2) since those columns
+    are not in the STKLM0 schema.  Score range 0–12.
+    """
+    psa  = pd.to_numeric(df_s.get("d_spsa",      pd.Series(np.nan, index=df_s.index)), errors="coerce").values
+    isup = pd.to_numeric(df_s.get("isup_gealson", pd.Series(np.nan, index=df_s.index)), errors="coerce").values
+    psm  = pd.to_numeric(df_s.get("pR_bin",       pd.Series(0.0,   index=df_s.index)), errors="coerce").fillna(0).values
+    lni  = pd.to_numeric(df_s.get("pN_bin",       pd.Series(0.0,   index=df_s.index)), errors="coerce").fillna(0).values
+    pT   = pd.to_numeric(df_s.get("pT_ord",       pd.Series(0.0,   index=df_s.index)), errors="coerce").fillna(0).values
+
+    scores = (
+        np.where(psa < 6, 0, np.where(psa <= 10, 1, 2))          # PSA
+        + np.where(isup <= 1, 0, np.where(isup == 2, 1,
+                   np.where(isup == 3, 2, 3)))                      # grade group
+        + np.where(psm >= 1, 2, 0)                                  # margins
+        + np.where(pT >= 1, 1, 0)                                   # ECE proxy (pT3+)
+        + np.where(pT >= 2, 2, 0)                                   # SVI proxy (pT3b+)
+        + np.where(lni >= 1, 4, 0)                                  # LNI
+    ).astype(float)
+    scores[np.isnan(psa) | np.isnan(isup)] = np.nan
+    return scores
+
+
+def _mskcc_score(df_s: pd.DataFrame) -> np.ndarray:
+    """Approximate MSKCC BCR nomogram (Stephenson 2005) from STKLM0 features.
+
+    Gleason primary/secondary is approximated from isup_gealson.
+    ECE and SVI are derived from pT_ord.
+    """
+    psa  = pd.to_numeric(df_s.get("d_spsa",      pd.Series(np.nan, index=df_s.index)), errors="coerce").values
+    isup = pd.to_numeric(df_s.get("isup_gealson", pd.Series(np.nan, index=df_s.index)), errors="coerce").values
+    psm  = pd.to_numeric(df_s.get("pR_bin",       pd.Series(0.0,   index=df_s.index)), errors="coerce").fillna(0).values
+    pT   = pd.to_numeric(df_s.get("pT_ord",       pd.Series(0.0,   index=df_s.index)), errors="coerce").fillna(0).values
+
+    # Approximate Gleason from ISUP grade group
+    gp = np.where(isup >= 3, 4.0, 3.0)
+    gs = np.where(isup == 1, 3.0, np.where(isup == 2, 4.0,
+                  np.where(isup == 3, 3.0, 4.0)))
+    gp[np.isnan(isup)] = np.nan
+    gs[np.isnan(isup)] = np.nan
+
+    ece = (pT >= 1).astype(float)
+    svi = (pT >= 2).astype(float)
+    pt4 = (pT >= 3).astype(float)
+
+    lp = (0.508 * np.log(np.clip(psa, 1e-3, None) + 0.1)
+          + 0.396 * (gp == 4) + 0.781 * (gp == 5)
+          + 0.360 * (gs == 4) + 0.886 * (gs == 5)
+          + 0.540 * np.where((ece >= 1) & (svi < 1), 1.0, 0.0)
+          + 0.831 * svi + 1.021 * pt4
+          + 0.386 * (psm >= 1)).astype(float)
+    lp[np.isnan(psa) | np.isnan(gp)] = np.nan
+    return 1.0 - 0.92 ** np.exp(lp)
+
+
+def _nomogram_c_matrix(scores: np.ndarray) -> np.ndarray:
+    """IPCW C-index for a static nomogram score at each evaluation time.
+
+    Scores are one-per-patient (same value broadcast across all p_times).
+    """
+    from bertpca.metrics import weighted_c_index as _wci
+    train_last = train_df.groupby(level=0).last()
+    test_last  = test_df.groupby(level=0).last()
+    T_tr = train_last["tte"].values
+    Y_tr = train_last["label"].values.astype(float)
+    T_te = test_last["tte"].values
+    Y_te = test_last["label"].values.astype(float)
+
+    valid = ~np.isnan(scores)
+    mat   = np.full((len(P_TIMES), len(E_TIMES)), np.nan)
+    if valid.sum() < 5:
+        return mat
+    for j, e in enumerate(E_TIMES):
+        c = _wci(T_tr, Y_tr, scores[valid], T_te[valid], Y_te[valid], float(e))
+        mat[:, j] = c   # same C-index for every p_time (static score)
+    return mat
+
+
+def _run_capras():
+    _log("CAPRA-S: computing scores …")
+    df_s = test_df.groupby(level=0).first()
+    scores = _capras_score(df_s)
+    n_valid = int(np.sum(~np.isnan(scores)))
+    _log(f"CAPRA-S: {n_valid}/{len(scores)} patients scored (requires d_spsa + isup_gealson)")
+    return _nomogram_c_matrix(scores)
+
+
+def _run_mskcc():
+    _log("MSKCC: computing scores …")
+    df_s = test_df.groupby(level=0).first()
+    scores = _mskcc_score(df_s)
+    n_valid = int(np.sum(~np.isnan(scores)))
+    _log(f"MSKCC: {n_valid}/{len(scores)} patients scored")
+    return _nomogram_c_matrix(scores)
+
+
 def _run_coxph():
     from src.baselines.coxph_rsf import train_coxph, evaluate_static_model
     _log("CoxPH: training …")
@@ -313,9 +423,11 @@ def _run_ddh():
     )
 
 baseline_fns = {}
-if run_coxph: baseline_fns["CoxPH"] = _run_coxph
-if run_rsf:   baseline_fns["RSF"]   = _run_rsf
-if run_ddh:   baseline_fns["DDH"]   = _run_ddh
+if run_coxph:  baseline_fns["CoxPH"]   = _run_coxph
+if run_rsf:    baseline_fns["RSF"]     = _run_rsf
+if run_ddh:    baseline_fns["DDH"]     = _run_ddh
+if run_capras: baseline_fns["CAPRA-S"] = _run_capras
+if run_mskcc:  baseline_fns["MSKCC"]   = _run_mskcc
 
 n_bl = len(baseline_fns)
 for i, (name, fn) in enumerate(baseline_fns.items()):
@@ -349,8 +461,11 @@ def _col_mean(mat, j):
 
 rows = []
 
+_NOMOGRAM_NAMES = {"CAPRA-S", "MSKCC"}
+
 for name, mat in baseline_results.items():
-    row = {"Method": name, "Type": "Baseline", "Mean C-index": round(_masked_mean(mat), 4)}
+    btype = "Nomogram" if name in _NOMOGRAM_NAMES else "Baseline"
+    row = {"Method": name, "Type": btype, "Mean C-index": round(_masked_mean(mat), 4)}
     for j, e in enumerate(E_TIMES):
         row[f"e={e//365}y"] = round(_col_mean(mat, j), 4) if mat is not None else np.nan
     rows.append(row)
@@ -374,7 +489,8 @@ cmp_df = pd.DataFrame(rows).set_index("Method")
 st.subheader("Model Comparison")
 st.caption(
     "IPCW time-dependent C-index on held-out test split. "
-    "Values averaged over p_times=[365d, 730d]. NaN = insufficient events at that horizon."
+    "Values averaged over p_times=[365d, 730d]. NaN = insufficient events at that horizon. "
+    "CAPRA-S/MSKCC: ECE and SVI derived from pT_ord (proxy); MSKCC originally a BCR nomogram."
 )
 
 numeric_cols = [c for c in cmp_df.columns if c not in ("Type",)]
