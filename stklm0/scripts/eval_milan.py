@@ -98,7 +98,7 @@ def run(outcome: str = "csm", model_path: str = None):
             train_path, val_path, test_path,
             static_features, dynamic_features,
             config.SEQ_LENGTH, config.BATCH_SIZE,
-            config.T_MAX, augment=False, scale=config.SCALE_FEATURES,
+            config.T_MAX, augment=False, scale_features=config.SCALE_FEATURES,
         )
     )
 
