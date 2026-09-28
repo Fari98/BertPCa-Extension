@@ -1,1 +1,20 @@
-placeholder
+Python: C:\Users\farinati.davide\AppData\Local\anaconda3\envs\hsr-gpu\python.exe 
+ 
+2026-09-28 09:14:20.268466: W tensorflow/stream_executor/platform/default/dso_loader.cc:64] Could not load dynamic library 'cudart64_110.dll'; dlerror: cudart64_110.dll not found
+2026-09-28 09:14:20.268536: I tensorflow/stream_executor/cuda/cudart_stub.cc:29] Ignore above cudart dlerror if you do not have a GPU set up on your machine.
+Loading: C:\Users\farinati.davide\OneDrive - NOVAIMS\HSR\URI\code\BertPCa Extension\stklm0\data\test_patients.csv
+  200 patients
+  Train: 160 patients (9 CSM events)
+  Test:  20 patients (1 CSM events)
+
+CAPRA-S  — valid: 20/20 | mean=5.35, range=[3, 11]
+MSKCC    — valid: 20/20 | mean=0.466, range=[0.198, 0.798]
+Traceback (most recent call last):
+  File "C:\Users\farinati.davide\OneDrive - NOVAIMS\HSR\URI\code\BertPCa Extension\stklm0\scripts\run_nomograms.py", line 186, in <module>
+    main()
+  File "C:\Users\farinati.davide\OneDrive - NOVAIMS\HSR\URI\code\BertPCa Extension\stklm0\scripts\run_nomograms.py", line 155, in main
+    print("\n\u2500\u2500\u2500 IPCW C-index (test split) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
+  File "C:\Users\farinati.davide\AppData\Local\anaconda3\envs\hsr-gpu\lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 2-4: character maps to <undefined>
+Exit code: 1 

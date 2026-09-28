@@ -152,9 +152,9 @@ def main():
     capras_ci = nomogram_c_index(capras, train_last, test_last)
     mskcc_ci  = nomogram_c_index(mskcc,  train_last, test_last)
 
-    print("\n─── IPCW C-index (test split) ───────────────────────")
+    print("\n--- IPCW C-index (test split) -----------------------")
     print(f"{'Model':<12}  {'e=5y':>8}  {'e=10y':>8}  {'Mean':>8}")
-    print("─" * 44)
+    print("-" * 44)
     for name, ci in [("CAPRA-S", capras_ci), ("MSKCC", mskcc_ci)]:
         c5  = ci.get(1825, np.nan)
         c10 = ci.get(3650, np.nan)
@@ -162,7 +162,7 @@ def main():
         def fmt(v):
             return f"{v:.4f}" if not np.isnan(v) and v != -1 else "   —  "
         print(f"{name:<12}  {fmt(c5):>8}  {fmt(c10):>8}  {fmt(mean):>8}")
-    print("─" * 44)
+    print("-" * 44)
 
     # Save
     out_dir = os.path.join(_REPO_ROOT, "stklm0", "outputs", "results")
